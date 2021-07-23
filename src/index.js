@@ -21,6 +21,7 @@ module.exports = {
   DiscordAPIError: require('./rest/DiscordAPIError'),
   HTTPError: require('./rest/HTTPError'),
   RateLimitError: require('./rest/RateLimitError'),
+  LimitedCollection: require('./util/LimitedCollection'),
   MessageFlags: require('./util/MessageFlags'),
   Intents: require('./util/Intents'),
   Options: require('./util/Options'),
@@ -44,6 +45,7 @@ module.exports = {
   GuildMemberManager: require('./managers/GuildMemberManager'),
   GuildMemberRoleManager: require('./managers/GuildMemberRoleManager'),
   GuildManager: require('./managers/GuildManager'),
+  GuildStickerManager: require('./managers/GuildStickerManager'),
   ReactionManager: require('./managers/ReactionManager'),
   ReactionUserManager: require('./managers/ReactionUserManager'),
   MessageManager: require('./managers/MessageManager'),
@@ -67,12 +69,10 @@ module.exports = {
   CategoryChannel: require('./structures/CategoryChannel'),
   Channel: require('./structures/Channel'),
   ClientApplication: require('./structures/ClientApplication'),
-  get ClientUser() {
-    // This is a getter so that it properly extends any custom User class
-    return require('./structures/ClientUser');
-  },
+  ClientUser: require('./structures/ClientUser'),
   Collector: require('./structures/interfaces/Collector'),
   CommandInteraction: require('./structures/CommandInteraction'),
+  CommandInteractionOptionResolver: require('./structures/CommandInteractionOptionResolver.js'),
   DMChannel: require('./structures/DMChannel'),
   Emoji: require('./structures/Emoji'),
   Guild: require('./structures/Guild'),

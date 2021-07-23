@@ -15,15 +15,22 @@ class ThreadChannel extends Channel {
   /**
    * @param {Guild} guild The guild the thread channel is part of
    * @param {APIChannel} data The data for the thread channel
+   * @param {Client} [client] A safety parameter for the client that instantiated this
    */
-  constructor(guild, data) {
-    super(guild.client, data, false);
+  constructor(guild, data, client) {
+    super(guild?.client ?? client, data, false);
 
     /**
      * The guild the thread is in
      * @type {Guild}
      */
     this.guild = guild;
+
+    /**
+     * The id of the guild the channel is in
+     * @type {Snowflake}
+     */
+    this.guildId = guild?.id ?? data.guild_id;
 
     /**
      * A manager of the messages sent to this thread
@@ -36,8 +43,6 @@ class ThreadChannel extends Channel {
      * @type {ThreadMemberManager}
      */
     this.members = new ThreadMemberManager(this);
-
-    this._typing = new Map();
     if (data) this._patch(data);
   }
 
@@ -50,12 +55,16 @@ class ThreadChannel extends Channel {
      */
     this.name = data.name;
 
+    if ('guild_id' in data) {
+      this.guildId = data.guild_id;
+    }
+
     if ('parent_id' in data) {
       /**
-       * The ID of the parent channel of this thread
+       * The id of the parent channel of this thread
        * @type {Snowflake}
        */
-      this.parentID = data.parent_id;
+      this.parentId = data.parent_id;
     }
 
     if ('thread_metadata' in data) {
@@ -91,15 +100,15 @@ class ThreadChannel extends Channel {
        * The id of the member who created this thread
        * @type {?Snowflake}
        */
-      this.ownerID = data.owner_id;
+      this.ownerId = data.owner_id;
     }
 
     if ('last_message_id' in data) {
       /**
-       * The ID of the last message sent in this thread, if one was sent
+       * The last message id sent in this thread, if one was sent
        * @type {?Snowflake}
        */
-      this.lastMessageID = data.last_message_id;
+      this.lastMessageId = data.last_message_id;
     }
 
     if ('last_pin_timestamp' in data) {
@@ -139,7 +148,7 @@ class ThreadChannel extends Channel {
     }
 
     if (data.member && this.client.user) this.members._add({ user_id: this.client.user.id, ...data.member });
-    if (data.messages) for (const message of data.messages) this.messages.add(message);
+    if (data.messages) for (const message of data.messages) this.messages._add(message);
   }
 
   /**
@@ -167,7 +176,7 @@ class ThreadChannel extends Channel {
    * @readonly
    */
   get parent() {
-    return this.guild.channels.resolve(this.parentID);
+    return this.guild.channels.resolve(this.parentId);
   }
 
   /**
@@ -267,9 +276,10 @@ class ThreadChannel extends Channel {
   }
 
   /**
-   * Sets whether the thread can be archived by anyone or just mods.
+   * Sets whether the thread can be **unarchived** by anyone with `SEND_MESSAGES` permission.
+   * When a thread is locked only members with `MANAGE_THREADS` can unarchive it.
    * @param {boolean} [locked=true] Whether the thread is locked
-   * @param {string} [reason] Reason for archiving or unarchiving
+   * @param {string} [reason] Reason for locking or unlocking the thread
    * @returns {Promise<ThreadChannel>}
    * @example
    * // Set the thread to locked
@@ -321,7 +331,7 @@ class ThreadChannel extends Channel {
    * @readonly
    */
   get editable() {
-    return (this.ownerID === this.client.user.id && (this.type !== 'private_thread' || this.joined)) || this.manageable;
+    return (this.ownerId === this.client.user.id && (this.type !== 'private_thread' || this.joined)) || this.manageable;
   }
 
   /**
@@ -334,7 +344,7 @@ class ThreadChannel extends Channel {
       !this.archived &&
       !this.joined &&
       this.permissionsFor(this.client.user)?.has(
-        this.type === 'private_thread' ? Permissions.FLAGS.MANAGE_THREADS : Permissions.FLAGS.VIEW_CHANNEL,
+        this.type === 'GUILD_PRIVATE_THREAD' ? Permissions.FLAGS.MANAGE_THREADS : Permissions.FLAGS.VIEW_CHANNEL,
         false,
       )
     );
@@ -361,7 +371,9 @@ class ThreadChannel extends Channel {
       this.permissionsFor(this.client.user)?.any(
         [
           Permissions.FLAGS.SEND_MESSAGES,
-          this.type === 'private_thread' ? Permissions.FLAGS.USE_PRIVATE_THREADS : Permissions.FLAGS.USE_PUBLIC_THREADS,
+          this.type === 'GUILD_PRIVATE_THREAD'
+            ? Permissions.FLAGS.USE_PRIVATE_THREADS
+            : Permissions.FLAGS.USE_PUBLIC_THREADS,
         ],
         false,
       )
@@ -399,10 +411,7 @@ class ThreadChannel extends Channel {
   get lastMessage() {}
   get lastPinAt() {}
   send() {}
-  startTyping() {}
-  stopTyping() {}
-  get typing() {}
-  get typingCount() {}
+  sendTyping() {}
   createMessageCollector() {}
   awaitMessages() {}
   createMessageComponentCollector() {}

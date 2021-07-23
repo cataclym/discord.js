@@ -22,20 +22,19 @@
  * @typedef {Function} CacheFactory
  * @param {Function} manager The manager class the cache is being requested from.
  * @param {Function} holds The class that the cache will hold.
- * @returns {Collection} Cache instance that follows collection interface.
+ * @returns {Collection} A Collection used to store the cache of the manager.
  */
 
 /**
  * Options for a client.
  * @typedef {Object} ClientOptions
- * @property {number|number[]|string} [shards] ID of the shard to run, or an array of shard IDs. If not specified,
+ * @property {number|number[]|string} [shards] The shard's id to run, or an array of shard ids. If not specified,
  * the client will spawn {@link ClientOptions#shardCount} shards. If set to `auto`, it will fetch the
  * recommended amount of shards from Discord and spawn that amount
  * @property {number} [shardCount=1] The total amount of shards used by all processes of this bot
  * (e.g. recommended shard count, shard count of the ShardingManager)
  * @property {CacheFactory} [makeCache] Function to create a cache.
- * (-1 or Infinity for unlimited - don't do this without message sweeping, otherwise memory usage will climb
- * indefinitely)
+ * You can use your own function, or the {@link Options} class to customize the Collection used for the cache.
  * @property {number} [messageCacheLifetime=0] How long a message should stay in the cache until it is considered
  * sweepable (in seconds, 0 for forever)
  * @property {number} [messageSweepInterval=0] How frequently to remove messages from the cache that are older than
@@ -62,6 +61,9 @@
  * route starting with /channels, such as /channels/222197033908436994/messages) or a function returning true, a
  * {@link RateLimitError} will be thrown. Otherwise the request will be queued for later
  * @property {number} [retryLimit=1] How many times to retry on 5XX errors (Infinity for indefinite amount of retries)
+ * @property {boolean} [failIfNotExists=true] Default value for {@link ReplyMessageOptions#failIfNotExists}
+ * @property {string[]} [userAgentSuffix] An array of additional bot info to be appended to the end of the required
+ * [User Agent](https://discord.com/developers/docs/reference#user-agent) header
  * @property {PresenceData} [presence={}] Presence data to use upon login
  * @property {IntentsResolvable} intents Intents to enable for this connection
  * @property {WebsocketOptions} [ws] Options for the WebSocket
@@ -108,6 +110,8 @@ class Options extends null {
       retryLimit: 1,
       restTimeOffset: 500,
       restSweepInterval: 60,
+      failIfNotExists: true,
+      userAgentSuffix: [],
       presence: {},
       ws: {
         large_threshold: 50,

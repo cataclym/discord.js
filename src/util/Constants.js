@@ -42,31 +42,35 @@ function makeImageUrl(root, { format = 'webp', size } = {}) {
 exports.Endpoints = {
   CDN(root) {
     return {
-      Emoji: (emojiID, format = 'png') => `${root}/emojis/${emojiID}.${format}`,
+      Emoji: (emojiId, format = 'png') => `${root}/emojis/${emojiId}.${format}`,
       Asset: name => `${root}/assets/${name}`,
       DefaultAvatar: discriminator => `${root}/embed/avatars/${discriminator}.png`,
-      Avatar: (userID, hash, format = 'webp', size, dynamic = false) => {
+      Avatar: (userId, hash, format = 'webp', size, dynamic = false) => {
         if (dynamic) format = hash.startsWith('a_') ? 'gif' : format;
-        return makeImageUrl(`${root}/avatars/${userID}/${hash}`, { format, size });
+        return makeImageUrl(`${root}/avatars/${userId}/${hash}`, { format, size });
       },
-      Banner: (guildID, hash, format = 'webp', size) =>
-        makeImageUrl(`${root}/banners/${guildID}/${hash}`, { format, size }),
-      Icon: (guildID, hash, format = 'webp', size, dynamic = false) => {
+      Banner: (guildId, hash, format = 'webp', size) =>
+        makeImageUrl(`${root}/banners/${guildId}/${hash}`, { format, size }),
+      Icon: (guildId, hash, format = 'webp', size, dynamic = false) => {
         if (dynamic) format = hash.startsWith('a_') ? 'gif' : format;
-        return makeImageUrl(`${root}/icons/${guildID}/${hash}`, { format, size });
+        return makeImageUrl(`${root}/icons/${guildId}/${hash}`, { format, size });
       },
-      AppIcon: (clientID, hash, { format = 'webp', size } = {}) =>
-        makeImageUrl(`${root}/app-icons/${clientID}/${hash}`, { size, format }),
-      AppAsset: (clientID, hash, { format = 'webp', size } = {}) =>
-        makeImageUrl(`${root}/app-assets/${clientID}/${hash}`, { size, format }),
-      GDMIcon: (channelID, hash, format = 'webp', size) =>
-        makeImageUrl(`${root}/channel-icons/${channelID}/${hash}`, { size, format }),
-      Splash: (guildID, hash, format = 'webp', size) =>
-        makeImageUrl(`${root}/splashes/${guildID}/${hash}`, { size, format }),
-      DiscoverySplash: (guildID, hash, format = 'webp', size) =>
-        makeImageUrl(`${root}/discovery-splashes/${guildID}/${hash}`, { size, format }),
-      TeamIcon: (teamID, hash, { format = 'webp', size } = {}) =>
-        makeImageUrl(`${root}/team-icons/${teamID}/${hash}`, { size, format }),
+      AppIcon: (clientId, hash, { format = 'webp', size } = {}) =>
+        makeImageUrl(`${root}/app-icons/${clientId}/${hash}`, { size, format }),
+      AppAsset: (clientId, hash, { format = 'webp', size } = {}) =>
+        makeImageUrl(`${root}/app-assets/${clientId}/${hash}`, { size, format }),
+      StickerPackBanner: (bannerId, format = 'webp', size) =>
+        makeImageUrl(`${root}/app-assets/710982414301790216/store/${bannerId}`, { size, format }),
+      GDMIcon: (channelId, hash, format = 'webp', size) =>
+        makeImageUrl(`${root}/channel-icons/${channelId}/${hash}`, { size, format }),
+      Splash: (guildId, hash, format = 'webp', size) =>
+        makeImageUrl(`${root}/splashes/${guildId}/${hash}`, { size, format }),
+      DiscoverySplash: (guildId, hash, format = 'webp', size) =>
+        makeImageUrl(`${root}/discovery-splashes/${guildId}/${hash}`, { size, format }),
+      TeamIcon: (teamId, hash, { format = 'webp', size } = {}) =>
+        makeImageUrl(`${root}/team-icons/${teamId}/${hash}`, { size, format }),
+      Sticker: (stickerId, stickerFormat) =>
+        `${root}/stickers/${stickerId}.${stickerFormat === 'LOTTIE' ? 'json' : 'png'}`,
     };
   },
   invite: (root, code) => `${root}/${code}`,
@@ -98,7 +102,7 @@ exports.Status = {
   RESUMING: 8,
 };
 
-exports.OPCodes = {
+exports.Opcodes = {
   DISPATCH: 0,
   HEARTBEAT: 1,
   IDENTIFY: 2,
@@ -178,6 +182,9 @@ exports.Events = {
   STAGE_INSTANCE_CREATE: 'stageInstanceCreate',
   STAGE_INSTANCE_UPDATE: 'stageInstanceUpdate',
   STAGE_INSTANCE_DELETE: 'stageInstanceDelete',
+  GUILD_STICKER_CREATE: 'stickerCreate',
+  GUILD_STICKER_DELETE: 'stickerDelete',
+  GUILD_STICKER_UPDATE: 'stickerUpdate',
 };
 
 exports.ShardEvents = {
@@ -253,6 +260,7 @@ exports.PartialTypes = keyMirror(['USER', 'CHANNEL', 'GUILD_MEMBER', 'MESSAGE', 
  * * STAGE_INSTANCE_CREATE
  * * STAGE_INSTANCE_UPDATE
  * * STAGE_INSTANCE_DELETE
+ * * GUILD_STICKERS_UPDATE
  * @typedef {string} WSEventType
  */
 exports.WSEvents = keyMirror([
@@ -305,6 +313,7 @@ exports.WSEvents = keyMirror([
   'STAGE_INSTANCE_CREATE',
   'STAGE_INSTANCE_UPDATE',
   'STAGE_INSTANCE_DELETE',
+  'GUILD_STICKERS_UPDATE',
 ]);
 
 /**
@@ -314,6 +323,7 @@ exports.WSEvents = keyMirror([
  * * `applications.commands`: allows this bot to create commands in the server
  * * `applications.entitlements`: allows reading entitlements for a users applications
  * * `applications.store.update`: allows reading and updating of store data for a users applications
+ * * `bot`: makes the bot join the selected guild
  * * `connections`: makes the endpoint for getting a users connections available
  * * `email`: allows the `/users/@me` endpoint return with an email
  * * `identify`: allows the `/users/@me` endpoint without an email
@@ -328,9 +338,10 @@ exports.InviteScopes = [
   'applications.commands',
   'applications.entitlements',
   'applications.store.update',
+  'bot',
   'connections',
   'email',
-  'identity',
+  'identify',
   'guilds',
   'guilds.join',
   'gdm.join',
@@ -413,31 +424,73 @@ exports.SystemMessageTypes = exports.MessageTypes.filter(
  */
 exports.ActivityTypes = createEnum(['PLAYING', 'STREAMING', 'LISTENING', 'WATCHING', 'CUSTOM', 'COMPETING']);
 
+/**
+ * All available channel types:
+ * * `GUILD_TEXT` - a guild text channel
+ * * `DM` - a DM channel
+ * * `GUILD_VOICE` - a guild voice channel
+ * * `GROUP_DM` - a group DM channel
+ * * `GUILD_CATEGORY` - a guild category channel
+ * * `GUILD_NEWS` - a guild news channel
+ * * `GUILD_STORE` - a guild store channel
+ * * `GUILD_NEWS_THREAD` - a guild news channel's public thread channel
+ * * `GUILD_PUBLIC_THREAD` - a guild text channel's public thread channel
+ * * `GUILD_PRIVATE_THREAD` - a guild text channel's private thread channel
+ * * `GUILD_STAGE_VOICE` - a guild stage voice channel
+ * * `UNKNOWN` - a generic channel of unknown type, could be Channel or GuildChannel
+ * @typedef {string} ChannelType
+ */
 exports.ChannelTypes = createEnum([
-  'TEXT',
+  'GUILD_TEXT',
   'DM',
-  'VOICE',
-  'GROUP',
-  'CATEGORY',
-  'NEWS',
-  // 6
-  'STORE',
+  'GUILD_VOICE',
+  'GROUP_DM',
+  'GUILD_CATEGORY',
+  'GUILD_NEWS',
+  'GUILD_STORE',
   ...Array(3).fill(null),
   // 10
-  'NEWS_THREAD',
-  'PUBLIC_THREAD',
-  'PRIVATE_THREAD',
-  'STAGE',
+  'GUILD_NEWS_THREAD',
+  'GUILD_PUBLIC_THREAD',
+  'GUILD_PRIVATE_THREAD',
+  'GUILD_STAGE_VOICE',
 ]);
 
 /**
- * The types of channels that are threads. The available types are:
- * * news_thread
- * * public_thread
- * * private_thread
- * @typedef {string} ThreadChannelType
+ * The types of channels that are text-based. The available types are:
+ * * DM
+ * * GUILD_TEXT
+ * * GUILD_NEWS
+ * * GUILD_NEWS_THREAD
+ * * GUILD_PUBLIC_THREAD
+ * * GUILD_PRIVATE_THREAD
+ * @typedef {string} TextBasedChannelTypes
  */
-exports.ThreadChannelTypes = ['news_thread', 'public_thread', 'private_thread'];
+exports.TextBasedChannelTypes = [
+  'DM',
+  'GUILD_TEXT',
+  'GUILD_NEWS',
+  'GUILD_NEWS_THREAD',
+  'GUILD_PUBLIC_THREAD',
+  'GUILD_PRIVATE_THREAD',
+];
+
+/**
+ * The types of channels that are threads. The available types are:
+ * * GUILD_NEWS_THREAD
+ * * GUILD_PUBLIC_THREAD
+ * * GUILD_PRIVATE_THREAD
+ * @typedef {string} ThreadChannelTypes
+ */
+exports.ThreadChannelTypes = ['GUILD_NEWS_THREAD', 'GUILD_PUBLIC_THREAD', 'GUILD_PRIVATE_THREAD'];
+
+/**
+ * The types of channels that are voice-based. The available types are:
+ * * GUILD_VOICE
+ * * GUILD_STAGE_VOICE
+ * @typedef {string} VoiceBasedChannelTypes
+ */
+exports.VoiceBasedChannelTypes = ['GUILD_VOICE', 'GUILD_STAGE_VOICE'];
 
 exports.ClientApplicationAssetTypes = {
   SMALL: 1,
@@ -721,6 +774,8 @@ exports.APIErrors = {
   INVALID_FORM_BODY: 50035,
   INVITE_ACCEPTED_TO_GUILD_NOT_CONTAINING_BOT: 50036,
   INVALID_API_VERSION: 50041,
+  FILE_UPLOADED_EXCEEDS_MAXIMUM_SIZE: 50045,
+  INVALID_FILE_UPLOADED: 50046,
   CANNOT_SELF_REDEEM_GIFT: 50054,
   PAYMENT_SOURCE_REQUIRED: 50070,
   CANNOT_DELETE_COMMUNITY_REQUIRED_CHANNEL: 50074,
@@ -736,7 +791,14 @@ exports.APIErrors = {
   MESSAGE_ALREADY_HAS_THREAD: 160004,
   THREAD_LOCKED: 160005,
   MAXIMUM_ACTIVE_THREADS: 160006,
-  MAXIMUM_ACTIVE_ANNOUCEMENT_THREAD: 160007,
+  MAXIMUM_ACTIVE_ANNOUNCEMENT_THREADS: 160007,
+  INVALID_JSON_FOR_UPLOADED_LOTTIE_FILE: 170001,
+  UPLOADED_LOTTIES_CANNOT_CONTAIN_RASTERIZED_IMAGES: 170002,
+  STICKER_MAXIMUM_FRAMERATE_EXCEEDED: 170003,
+  STICKER_FRAME_COUNT_EXCEEDS_MAXIMUM_OF_1000_FRAMES: 170004,
+  LOTTIE_ANIMATION_MAXIMUM_DIMENSIONS_EXCEEDED: 170005,
+  STICKER_FRAME_RATE_IS_TOO_SMALL_OR_TOO_LARGE: 170006,
+  STICKER_ANIMATION_DURATION_EXCEEDS_MAXIMUM_OF_5_SECONDS: 170007,
 };
 
 /**
@@ -765,6 +827,14 @@ exports.WebhookTypes = createEnum([null, 'Incoming', 'Channel Follower']);
 
 /**
  * The value set for a sticker's type:
+ * * STANDARD
+ * * GUILD
+ * @typedef {string} StickerFormatType
+ */
+exports.StickerTypes = createEnum([null, 'STANDARD', 'GUILD']);
+
+/**
+ * The value set for a sticker's format type:
  * * PNG
  * * APNG
  * * LOTTIE

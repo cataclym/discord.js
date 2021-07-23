@@ -28,13 +28,13 @@ class RoleManager extends CachedManager {
    * @name RoleManager#cache
    */
 
-  add(data, cache) {
-    return super.add(data, cache, { extras: [this.guild] });
+  _add(data, cache) {
+    return super._add(data, cache, { extras: [this.guild] });
   }
 
   /**
    * Obtains a role from Discord, or the role cache if they're already available.
-   * @param {Snowflake} [id] ID of the role
+   * @param {Snowflake} [id] The role's id
    * @param {BaseFetchOptions} [options] Additional options for this fetch
    * @returns {Promise<?Role|Collection<Snowflake, Role>>}
    * @example
@@ -57,7 +57,7 @@ class RoleManager extends CachedManager {
     // We cannot fetch a single role, as of this commit's date, Discord API throws with 405
     const data = await this.client.api.guilds(this.guild.id).roles.get();
     const roles = new Collection();
-    for (const role of data) roles.set(role.id, this.add(role, cache));
+    for (const role of data) roles.set(role.id, this._add(role, cache));
     return id ? roles.get(id) ?? null : roles;
   }
 
@@ -69,7 +69,7 @@ class RoleManager extends CachedManager {
    */
 
   /**
-   * Resolves a RoleResolvable to a Role object.
+   * Resolves a {@link RoleResolvable} to a {@link Role} object.
    * @method resolve
    * @memberof RoleManager
    * @instance
@@ -78,8 +78,8 @@ class RoleManager extends CachedManager {
    */
 
   /**
-   * Resolves a RoleResolvable to a role ID string.
-   * @method resolveID
+   * Resolves a {@link RoleResolvable} to a {@link Role} id.
+   * @method resolveId
    * @memberof RoleManager
    * @instance
    * @param {RoleResolvable} role The role resolvable to resolve
@@ -199,9 +199,9 @@ class RoleManager extends CachedManager {
    * @returns {?Role}
    */
   botRoleFor(user) {
-    const userID = this.client.users.resolveID(user);
-    if (!userID) return null;
-    return this.cache.find(role => role.tags?.botID === userID) ?? null;
+    const userId = this.client.users.resolveId(user);
+    if (!userId) return null;
+    return this.cache.find(role => role.tags?.botId === userId) ?? null;
   }
 
   /**

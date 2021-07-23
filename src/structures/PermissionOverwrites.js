@@ -27,7 +27,7 @@ class PermissionOverwrites extends Base {
 
   _patch(data) {
     /**
-     * The ID of this overwrite, either a user ID or a role ID
+     * The overwrite's id, either a {@link User} or a {@link Role} id
      * @type {Snowflake}
      */
     this.id = data.id;
@@ -36,7 +36,7 @@ class PermissionOverwrites extends Base {
      * The type of this overwrite
      * @type {OverwriteType}
      */
-    this.type = OverwriteTypes[data.type];
+    this.type = typeof data.type === 'number' ? OverwriteTypes[data.type] : data.type;
 
     /**
      * The permissions that are denied for the user or role.

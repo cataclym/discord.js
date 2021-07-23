@@ -27,7 +27,7 @@ class ThreadManager extends CachedManager {
    * @name ThreadManager#cache
    */
 
-  add(thread) {
+  _add(thread) {
     const existing = this.cache.get(thread.id);
     if (existing) return existing;
     this.cache.set(thread.id, thread);
@@ -42,7 +42,7 @@ class ThreadManager extends CachedManager {
    */
 
   /**
-   * Resolves a ThreadChannelResolvable to a Thread Channel object.
+   * Resolves a {@link ThreadChannelResolvable} to a {@link ThreadChannel} object.
    * @method resolve
    * @memberof ThreadManager
    * @instance
@@ -51,8 +51,8 @@ class ThreadManager extends CachedManager {
    */
 
   /**
-   * Resolves a ThreadChannelResolvable to a thread channel ID string.
-   * @method resolveID
+   * Resolves a {@link ThreadChannelResolvable} to a {@link ThreadChannel} id.
+   * @method resolveId
    * @memberof ThreadManager
    * @instance
    * @param {ThreadChannelResolvable} thread The ThreadChannel resolvable to resolve
@@ -77,9 +77,9 @@ class ThreadManager extends CachedManager {
    * should automatically archive in case of no recent activity
    * @property {MessageResolvable} [startMessage] The message to start a thread from. <warn>If this is defined then type
    * of thread gets automatically defined and cannot be changed. The provided `type` field will be ignored</warn>
-   * @property {ThreadChannelType|number} [type] The type of thread to create. Defaults to `public_thread` if created in
-   * a {@link TextChannel} <warn>When creating threads in a {@link NewsChannel} this is ignored and is always
-   * `news_thread`</warn>
+   * @property {ThreadChannelTypes|number} [type] The type of thread to create. Defaults to `GUILD_PUBLIC_THREAD` if
+   * created in a {@link TextChannel} <warn>When creating threads in a {@link NewsChannel} this is ignored and is always
+   * `GUILD_NEWS_THREAD`</warn>
    * @property {string} [reason] Reason for creating the thread
    */
 
@@ -103,7 +103,7 @@ class ThreadManager extends CachedManager {
    *   .create({
    *      name: 'mod-talk',
    *      autoArchiveDuration: 60,
-   *      type: 'private_thread',
+   *      type: 'GUILD_PRIVATE_THREAD',
    *      reason: 'Needed a separate thread for moderation',
    *    })
    *   .then(threadChannel => console.log(threadChannel))
@@ -114,13 +114,14 @@ class ThreadManager extends CachedManager {
     if (type && typeof type !== 'string' && typeof type !== 'number') {
       throw new TypeError('INVALID_TYPE', 'type', 'ThreadChannelType or Number');
     }
-    let resolvedType = this.channel.type === 'news' ? ChannelTypes.NEWS_THREAD : ChannelTypes.PUBLIC_THREAD;
+    let resolvedType =
+      this.channel.type === 'GUILD_NEWS' ? ChannelTypes.GUILD_NEWS_THREAD : ChannelTypes.GUILD_PUBLIC_THREAD;
     if (startMessage) {
-      const startMessageID = this.channel.messages.resolveID(startMessage);
-      if (!startMessageID) throw new TypeError('INVALID_TYPE', 'startMessage', 'MessageResolvable');
-      path = path.messages(startMessageID);
-    } else if (this.channel.type !== 'news') {
-      resolvedType = typeof type === 'string' ? ChannelTypes[type.toUpperCase()] : type ?? resolvedType;
+      const startMessageId = this.channel.messages.resolveId(startMessage);
+      if (!startMessageId) throw new TypeError('INVALID_TYPE', 'startMessage', 'MessageResolvable');
+      path = path.messages(startMessageId);
+    } else if (this.channel.type !== 'GUILD_NEWS') {
+      resolvedType = typeof type === 'string' ? ChannelTypes[type] : type ?? resolvedType;
     }
 
     const data = await path.threads.post({
@@ -157,7 +158,7 @@ class ThreadManager extends CachedManager {
    */
   fetch(options, { cache = true, force = false } = {}) {
     if (!options) return this.fetchActive(cache);
-    const channel = this.client.channels.resolveID(options);
+    const channel = this.client.channels.resolveId(options);
     if (channel) return this.client.channels.fetch(channel, cache, force);
     if (options.archived) {
       return this.fetchArchived(options.archived, cache);
@@ -206,7 +207,7 @@ class ThreadManager extends CachedManager {
     let id;
     if (typeof before !== 'undefined') {
       if (before instanceof ThreadChannel || /^\d{16,19}$/.test(String(before))) {
-        id = this.resolveID(before);
+        id = this.resolveId(before);
         timestamp = this.resolve(before)?.archivedAt?.toISOString();
       } else {
         try {
@@ -234,7 +235,7 @@ class ThreadManager extends CachedManager {
 
   _mapThreads(rawThreads, cache) {
     const threads = rawThreads.threads.reduce((coll, raw) => {
-      const thread = this.client.channels.add(raw, null, cache);
+      const thread = this.client.channels._add(raw, null, cache);
       return coll.set(thread.id, thread);
     }, new Collection());
     // Discord sends the thread id as id in this object
