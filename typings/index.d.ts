@@ -125,6 +125,7 @@ export abstract class Application extends Base {
 
 export class ApplicationCommand<PermissionsFetchType = {}> extends Base {
   public constructor(client: Client, data: unknown, guild?: Guild, guildId?: Snowflake);
+  public applicationId: Snowflake;
   public readonly createdAt: Date;
   public readonly createdTimestamp: number;
   public defaultPermission: boolean;
@@ -297,7 +298,7 @@ export class Client<Ready extends boolean = boolean> extends BaseClient {
   public fetchSticker(id: Snowflake): Promise<Sticker>;
   public fetchPremiumStickerPacks(): Promise<Collection<Snowflake, StickerPack>>;
   public fetchWebhook(id: Snowflake, token?: string): Promise<Webhook>;
-  public fetchWidget(guild: GuildResolvable): Promise<Widget>;
+  public fetchGuildWidget(guild: GuildResolvable): Promise<Widget>;
   public generateInvite(options?: InviteGenerationOptions): string;
   public login(token?: string): Promise<string>;
   public isReady(): this is Client<true>;
@@ -446,8 +447,11 @@ export class CommandInteractionOptionResolver {
 
   public get(name: string, required: true): CommandInteractionOption;
   public get(name: string, required?: boolean): CommandInteractionOption | null;
-  public getSubCommand(): string;
-  public getSubCommandGroup(): string;
+
+  public getSubCommand(required?: true): string;
+  public getSubCommand(required: boolean): string | null;
+  public getSubCommandGroup(required?: true): string;
+  public getSubCommandGroup(required: boolean): string | null;
   public getBoolean(name: string, required: true): boolean;
   public getBoolean(name: string, required?: boolean): boolean | null;
   public getChannel(name: string, required: true): NonNullable<CommandInteractionOption['channel']>;
@@ -456,6 +460,8 @@ export class CommandInteractionOptionResolver {
   public getString(name: string, required?: boolean): string | null;
   public getInteger(name: string, required: true): number;
   public getInteger(name: string, required?: boolean): number | null;
+  public getNumber(name: string, required: true): number;
+  public getNumber(name: string, required?: boolean): number | null;
   public getUser(name: string, required: true): NonNullable<CommandInteractionOption['user']>;
   public getUser(name: string, required?: boolean): NonNullable<CommandInteractionOption['user']> | null;
   public getMember(name: string, required: true): NonNullable<CommandInteractionOption['member']>;
@@ -585,7 +591,8 @@ export class Guild extends AnonymousGuild {
   public fetchVanityData(): Promise<Vanity>;
   public fetchWebhooks(): Promise<Collection<Snowflake, Webhook>>;
   public fetchWelcomeScreen(): Promise<WelcomeScreen>;
-  public fetchWidget(): Promise<GuildWidget>;
+  public fetchWidget(): Promise<Widget>;
+  public fetchWidgetSettings(): Promise<GuildWidgetSettings>;
   public leave(): Promise<Guild>;
   public setAFKChannel(afkChannel: ChannelResolvable | null, reason?: string): Promise<Guild>;
   public setAFKTimeout(afkTimeout: number, reason?: string): Promise<Guild>;
@@ -611,7 +618,7 @@ export class Guild extends AnonymousGuild {
   public setSystemChannel(systemChannel: ChannelResolvable | null, reason?: string): Promise<Guild>;
   public setSystemChannelFlags(systemChannelFlags: SystemChannelFlagsResolvable, reason?: string): Promise<Guild>;
   public setVerificationLevel(verificationLevel: VerificationLevel | number, reason?: string): Promise<Guild>;
-  public setWidget(widget: GuildWidgetData, reason?: string): Promise<Guild>;
+  public setWidgetSettings(settings: GuildWidgetSettingsData, reason?: string): Promise<Guild>;
   public toJSON(): unknown;
 }
 
@@ -1125,8 +1132,8 @@ export class MessageComponentInteraction extends Interaction {
   public followUp(options: string | MessagePayload | InteractionReplyOptions): Promise<Message | APIMessage>;
   public reply(options: InteractionReplyOptions & { fetchReply: true }): Promise<Message | APIMessage>;
   public reply(options: string | MessagePayload | InteractionReplyOptions): Promise<void>;
-  public update(content: InteractionUpdateOptions & { fetchReply: true }): Promise<Message | APIMessage>;
-  public update(content: string | MessagePayload | InteractionUpdateOptions): Promise<void>;
+  public update(options: InteractionUpdateOptions & { fetchReply: true }): Promise<Message | APIMessage>;
+  public update(options: string | MessagePayload | InteractionUpdateOptions): Promise<void>;
 
   public static resolveType(type: MessageComponentTypeResolvable): MessageComponentType;
 }
@@ -1660,18 +1667,18 @@ export class TextChannel extends TextBasedChannel(GuildChannel) {
 }
 
 export class ThreadChannel extends TextBasedChannel(Channel) {
-  public constructor(guild: Guild, data?: object, client?: Client);
-  public archived: boolean;
-  public readonly archivedAt: Date;
-  public archiveTimestamp: number;
-  public autoArchiveDuration: ThreadAutoArchiveDuration;
+  public constructor(guild: Guild, data?: object, client?: Client, fromInteraction?: boolean);
+  public archived: boolean | null;
+  public readonly archivedAt: Date | null;
+  public archiveTimestamp: number | null;
+  public autoArchiveDuration: ThreadAutoArchiveDuration | null;
   public readonly editable: boolean;
   public guild: Guild;
   public guildId: Snowflake;
   public readonly guildMembers: Collection<Snowflake, GuildMember>;
   public readonly joinable: boolean;
   public readonly joined: boolean;
-  public locked: boolean;
+  public locked: boolean | null;
   public readonly manageable: boolean;
   public readonly sendable: boolean;
   public memberCount: number | null;
@@ -1679,10 +1686,10 @@ export class ThreadChannel extends TextBasedChannel(Channel) {
   public messages: MessageManager;
   public members: ThreadMemberManager;
   public name: string;
-  public ownerId: Snowflake;
+  public ownerId: Snowflake | null;
   public readonly parent: TextChannel | NewsChannel | null;
-  public parentId: Snowflake;
-  public rateLimitPerUser: number;
+  public parentId: Snowflake | null;
+  public rateLimitPerUser: number | null;
   public type: ThreadChannelTypes;
   public readonly unarchivable: boolean;
   public delete(reason?: string): Promise<ThreadChannel>;
@@ -3521,7 +3528,7 @@ export interface GuildCreateOptions {
   verificationLevel?: VerificationLevel | number;
 }
 
-export interface GuildWidget {
+export interface GuildWidgetSettings {
   enabled: boolean;
   channel: GuildChannel | null;
 }
@@ -3612,7 +3619,7 @@ export interface GuildPruneMembersOptions {
   roles?: RoleResolvable[];
 }
 
-export interface GuildWidgetData {
+export interface GuildWidgetSettingsData {
   enabled: boolean;
   channel: GuildChannelResolvable | null;
 }
@@ -3696,7 +3703,9 @@ export type InteractionResponseType = keyof typeof InteractionResponseTypes;
 
 export type InteractionType = keyof typeof InteractionTypes;
 
-export type InteractionUpdateOptions = Omit<InteractionReplyOptions, 'ephemeral'>;
+export interface InteractionUpdateOptions extends MessageEditOptions {
+  fetchReply?: boolean;
+}
 
 export type IntentsString =
   | 'GUILDS'

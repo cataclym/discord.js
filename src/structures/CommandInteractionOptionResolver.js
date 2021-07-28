@@ -97,10 +97,11 @@ class CommandInteractionOptionResolver {
 
   /**
    * Gets the selected sub-command.
-   * @returns {string} The name of the selected sub-command.
+   * @param {boolean} [required=true] Whether to throw an error if there is no sub-command.
+   * @returns {?string} The name of the selected sub-command, or null if not set and not required.
    */
-  getSubCommand() {
-    if (!this._subCommand) {
+  getSubCommand(required = true) {
+    if (required && !this._subCommand) {
       throw new TypeError('COMMAND_INTERACTION_OPTION_NO_SUB_COMMAND');
     }
     return this._subCommand;
@@ -108,10 +109,11 @@ class CommandInteractionOptionResolver {
 
   /**
    * Gets the selected sub-command group.
-   * @returns {string} The name of the selected sub-command group.
+   * @param {boolean} [required=true] Whether to throw an error if there is no sub-command group.
+   * @returns {?string} The name of the selected sub-command group, or null if not set and not required.
    */
-  getSubCommandGroup() {
-    if (!this._group) {
+  getSubCommandGroup(required = true) {
+    if (required && !this._group) {
       throw new TypeError('COMMAND_INTERACTION_OPTION_NO_SUB_COMMAND_GROUP');
     }
     return this._group;
@@ -159,6 +161,17 @@ class CommandInteractionOptionResolver {
    */
   getInteger(name, required = false) {
     const option = this._getTypedOption(name, 'INTEGER', ['value'], required);
+    return option?.value ?? null;
+  }
+
+  /**
+   * Gets a number option.
+   * @param {string} name The name of the option.
+   * @param {boolean} [required=false] Whether to throw an error if the option is not found.
+   * @returns {?number} The value of the option, or null if not set and not required.
+   */
+  getNumber(name, required = false) {
+    const option = this._getTypedOption(name, 'NUMBER', ['value'], required);
     return option?.value ?? null;
   }
 
