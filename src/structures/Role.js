@@ -189,7 +189,7 @@ class Role extends Base {
    * @property {number} [position] The position of the role
    * @property {PermissionResolvable} [permissions] The permissions of the role
    * @property {boolean} [mentionable] Whether or not the role should be mentionable
-   * @property {BufferResolvable|Base64Resolvable} [icon] The icon for the role
+   * @property {?(BufferResolvable|Base64Resolvable)} [icon] The icon for the role
    */
 
   /**
@@ -301,7 +301,7 @@ class Role extends Base {
 
   /**
    * Sets a new icon for the role.
-   * @param {BufferResolvable|Base64Resolvable} icon The icon for the role
+   * @param {?(BufferResolvable|Base64Resolvable)} icon The icon for the role
    * @param {string} [reason] Reason for changing the role's icon
    * @returns {Promise<Role>}
    */
