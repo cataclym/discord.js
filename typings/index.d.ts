@@ -972,7 +972,7 @@ export class HTTPError extends Error {
 }
 
 // tslint:disable-next-line:no-empty-interface - Merge RateLimitData into RateLimitError to not have to type it again
-export interface RateLimitError extends RateLimitData {}
+export interface RateLimitError extends RateLimitData { }
 export class RateLimitError extends Error {
   public constructor(data: RateLimitData);
   public name: 'RateLimitError';
@@ -1139,8 +1139,8 @@ type TaggedUnion<T, K extends keyof T, V extends T[K]> = T extends Record<K, V>
   ? T
   : T extends Record<K, infer U>
   ? V extends U
-    ? T
-    : never
+  ? T
+  : never
   : never;
 
 // This creates a map of MessageComponentTypes to their respective `InteractionCollectorOptionsResolvable` variant.
@@ -1152,8 +1152,8 @@ type CollectorOptionsTypeResolver<U extends InteractionCollectorOptionsResolvabl
 // `InteractionCollector<T>` variant back.
 type ConditionalInteractionCollectorType<T extends InteractionCollectorOptionsResolvable | undefined> =
   T extends InteractionCollectorOptions<infer Item>
-    ? InteractionCollector<Item>
-    : InteractionCollector<MessageComponentInteraction>;
+  ? InteractionCollector<Item>
+  : InteractionCollector<MessageComponentInteraction>;
 
 // This maps each componentType key to each variant.
 type MappedInteractionCollectorOptions = CollectorOptionsTypeResolver<InteractionCollectorOptionsResolvable>;
@@ -1169,20 +1169,20 @@ type InteractionExtractor<T extends MessageComponentType | MessageComponentTypes
   | MessageComponentType
   | MessageComponentTypes
   ? MappedInteractionCollectorOptions[T] extends InteractionCollectorOptions<infer Item>
-    ? Item
-    : never
+  ? Item
+  : never
   : MessageComponentInteraction;
 
 type MessageCollectorOptionsParams<T extends MessageComponentType | MessageComponentTypes | undefined> =
   | {
-      componentType?: T;
-    } & MessageComponentCollectorOptions<InteractionExtractor<T>>;
+    componentType?: T;
+  } & MessageComponentCollectorOptions<InteractionExtractor<T>>;
 
 type AwaitMessageCollectorOptionsParams<T extends MessageComponentType | MessageComponentTypes | undefined> =
   | { componentType?: T } & Pick<
-      InteractionCollectorOptions<InteractionExtractor<T>>,
-      keyof AwaitMessageComponentOptions<any>
-    >;
+    InteractionCollectorOptions<InteractionExtractor<T>>,
+    keyof AwaitMessageComponentOptions<any>
+  >;
 
 export class Message extends Base {
   public constructor(client: Client, data: RawMessageData);
@@ -1233,12 +1233,12 @@ export class Message extends Base {
   public reference: MessageReference | null;
   public awaitMessageComponent<
     T extends MessageComponentType | MessageComponentTypes | undefined = MessageComponentTypes.ACTION_ROW,
-  >(options?: AwaitMessageCollectorOptionsParams<T>): Promise<InteractionExtractor<T>>;
+    >(options?: AwaitMessageCollectorOptionsParams<T>): Promise<InteractionExtractor<T>>;
   public awaitReactions(options?: AwaitReactionsOptions): Promise<Collection<Snowflake | string, MessageReaction>>;
   public createReactionCollector(options?: ReactionCollectorOptions): ReactionCollector;
   public createMessageComponentCollector<
     T extends MessageComponentType | MessageComponentTypes | undefined = undefined,
-  >(options?: MessageCollectorOptionsParams<T>): InteractionCollectorReturnType<T>;
+    >(options?: MessageCollectorOptionsParams<T>): InteractionCollectorReturnType<T>;
   public delete(): Promise<Message>;
   public edit(content: string | MessageEditOptions | MessagePayload): Promise<Message>;
   public equals(message: Message, rawData: unknown): boolean;
@@ -1625,16 +1625,21 @@ export class Role extends Base {
   public rawPosition: number;
   public tags: RoleTagData | null;
   public comparePositionTo(role: RoleResolvable): number;
+  public icon: string | null;
+  public unicodeEmoji: string | null;
   public delete(reason?: string): Promise<Role>;
   public edit(data: RoleData, reason?: string): Promise<Role>;
   public equals(role: Role): boolean;
+  public iconURL(options?: StaticImageURLOptions): string | null;
   public permissionsIn(channel: GuildChannel | Snowflake): Readonly<Permissions>;
   public setColor(color: ColorResolvable, reason?: string): Promise<Role>;
   public setHoist(hoist?: boolean, reason?: string): Promise<Role>;
   public setMentionable(mentionable?: boolean, reason?: string): Promise<Role>;
   public setName(name: string, reason?: string): Promise<Role>;
   public setPermissions(permissions: PermissionResolvable, reason?: string): Promise<Role>;
+  public setIcon(icon: BufferResolvable | Base64Resolvable | EmojiResolvable | null, reason?: string): Promise<Role>;
   public setPosition(position: number, options?: SetRolePositionOptions): Promise<Role>;
+  public setUnicodeEmoji(unicodeEmoji: string | null, reason?: string): Promise<Role>;
   public toJSON(): unknown;
   public toString(): RoleMention;
 
@@ -2340,6 +2345,7 @@ export const Constants: {
         { format, size }: { format: AllowedImageFormat; size: AllowedImageSize },
       ) => string;
       Sticker: (stickerId: Snowflake, stickerFormat: StickerFormatType) => string;
+      RoleIcon: (roleId: Snowflake, hash: string, format: AllowedImageFormat, size: AllowedImageSize) => string;
     };
   };
   WSCodes: {
@@ -2424,7 +2430,7 @@ export class ApplicationCommandManager<
   ApplicationCommandScope = ApplicationCommand<{ guild: GuildResolvable }>,
   PermissionsOptionsExtras = { guild: GuildResolvable },
   PermissionsGuildType = null,
-> extends CachedManager<Snowflake, ApplicationCommandScope, ApplicationCommandResolvable> {
+  > extends CachedManager<Snowflake, ApplicationCommandScope, ApplicationCommandResolvable> {
   public constructor(client: Client, iterable?: Iterable<unknown>);
   public permissions: ApplicationCommandPermissionsManager<
     { command?: ApplicationCommandResolvable } & PermissionsOptionsExtras,
@@ -2471,7 +2477,7 @@ export class ApplicationCommandPermissionsManager<
   FullPermissionsOptions,
   GuildType,
   CommandIdType,
-> extends BaseManager {
+  > extends BaseManager {
   public constructor(manager: ApplicationCommandManager | GuildApplicationCommandManager | ApplicationCommand);
   private manager: ApplicationCommandManager | GuildApplicationCommandManager | ApplicationCommand;
 
@@ -2488,13 +2494,13 @@ export class ApplicationCommandPermissionsManager<
   public remove(
     options:
       | (FetchSingleOptions & {
-          users: UserResolvable | UserResolvable[];
-          roles?: RoleResolvable | RoleResolvable[];
-        })
+        users: UserResolvable | UserResolvable[];
+        roles?: RoleResolvable | RoleResolvable[];
+      })
       | (FetchSingleOptions & {
-          users?: UserResolvable | UserResolvable[];
-          roles: RoleResolvable | RoleResolvable[];
-        }),
+        users?: UserResolvable | UserResolvable[];
+        roles: RoleResolvable | RoleResolvable[];
+      }),
   ): Promise<ApplicationCommandPermissions[]>;
   public set(
     options: FetchSingleOptions & { permissions: ApplicationCommandPermissionData[] },
@@ -3278,8 +3284,8 @@ export type CacheFactory = (
 
 export type CacheWithLimitsOptions = {
   [K in keyof Caches]?: Caches[K][0]['prototype'] extends DataManager<infer K, infer V, any>
-    ? LimitedCollectionOptions<K, V> | number
-    : never;
+  ? LimitedCollectionOptions<K, V> | number
+  : never;
 };
 
 export interface ChannelCreationOverwrites {
@@ -4025,7 +4031,8 @@ export type GuildFeatures =
   | 'MORE_STICKERS'
   | 'THREE_DAY_THREAD_ARCHIVE'
   | 'SEVEN_DAY_THREAD_ARCHIVE'
-  | 'PRIVATE_THREADS';
+  | 'PRIVATE_THREADS'
+  | 'ROLE_ICONS';
 
 export interface GuildMemberEditData {
   nick?: string | null;
@@ -4607,24 +4614,24 @@ export type Partialize<
   N extends keyof T | null = null,
   M extends keyof T | null = null,
   E extends keyof T | '' = '',
-> = {
-  readonly client: Client;
-  id: Snowflake;
-  partial: true;
-} & {
-  [K in keyof Omit<T, 'client' | 'id' | 'partial' | E>]: K extends N ? null : K extends M ? T[K] | null : T[K];
-};
+  > = {
+    readonly client: Client;
+    id: Snowflake;
+    partial: true;
+  } & {
+    [K in keyof Omit<T, 'client' | 'id' | 'partial' | E>]: K extends N ? null : K extends M ? T[K] | null : T[K];
+  };
 
 export interface PartialDMChannel extends Partialize<DMChannel, null, null, 'lastMessageId'> {
   lastMessageId: undefined;
 }
 
-export interface PartialGuildMember extends Partialize<GuildMember, 'joinedAt' | 'joinedTimestamp', 'user'> {}
+export interface PartialGuildMember extends Partialize<GuildMember, 'joinedAt' | 'joinedTimestamp', 'user'> { }
 
 export interface PartialMessage
-  extends Partialize<Message, 'type' | 'system' | 'pinned' | 'tts', 'content' | 'cleanContent' | 'author'> {}
+  extends Partialize<Message, 'type' | 'system' | 'pinned' | 'tts', 'content' | 'cleanContent' | 'author'> { }
 
-export interface PartialMessageReaction extends Partialize<MessageReaction, 'count'> {}
+export interface PartialMessageReaction extends Partialize<MessageReaction, 'count'> { }
 
 export interface PartialOverwriteData {
   id: Snowflake | number;
@@ -4639,7 +4646,7 @@ export interface PartialRoleData extends RoleData {
 
 export type PartialTypes = 'USER' | 'CHANNEL' | 'GUILD_MEMBER' | 'MESSAGE' | 'REACTION';
 
-export interface PartialUser extends Partialize<User, 'username' | 'tag' | 'discriminator'> {}
+export interface PartialUser extends Partialize<User, 'username' | 'tag' | 'discriminator'> { }
 
 export type PresenceStatusData = ClientPresenceStatus | 'invisible';
 
@@ -4688,6 +4695,8 @@ export interface RoleData {
   position?: number;
   permissions?: PermissionResolvable;
   mentionable?: boolean;
+  icon?: BufferResolvable | Base64Resolvable | EmojiResolvable | null;
+  unicodeEmoji?: string | null;
 }
 
 export type RoleMention = '@everyone' | `<@&${Snowflake}>`;
