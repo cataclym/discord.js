@@ -96,10 +96,10 @@ class MessageSelectMenu extends BaseMessageComponent {
 
   /**
    * Sets the interactive status of the select menu
-   * @param {boolean} disabled Whether this select menu should be disabled
+   * @param {boolean} [disabled=true] Whether this select menu should be disabled
    * @returns {MessageSelectMenu}
    */
-  setDisabled(disabled) {
+  setDisabled(disabled = true) {
     this.disabled = disabled;
     return this;
   }
@@ -142,6 +142,16 @@ class MessageSelectMenu extends BaseMessageComponent {
    */
   addOptions(...options) {
     this.options.push(...this.constructor.normalizeOptions(options));
+    return this;
+  }
+
+  /**
+   * Sets the options of the select menu.
+   * @param {...MessageSelectOptionData|MessageSelectOptionData[]} options The options to set
+   * @returns {MessageSelectMenu}
+   */
+  setOptions(...options) {
+    this.spliceOptions(0, this.options.length, options);
     return this;
   }
 

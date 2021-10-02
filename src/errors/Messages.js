@@ -64,7 +64,6 @@ const Messages = {
 
   VOICE_NOT_STAGE_CHANNEL: 'You are only allowed to do this in stage channels.',
 
-  VOICE_STATE_UNCACHED_MEMBER: 'The member of this voice state is uncached.',
   VOICE_STATE_NOT_OWN:
     'You cannot self-deafen/mute/request to speak on VoiceStates that do not belong to the ClientUser.',
   VOICE_STATE_INVALID_TYPE: name => `${name} must be a boolean.`,
@@ -92,15 +91,20 @@ const Messages = {
   GUILD_OWNED: 'Guild is owned by the client.',
   GUILD_MEMBERS_TIMEOUT: "Members didn't arrive in time.",
   GUILD_UNCACHED_ME: 'The client user as a member of this guild is uncached.',
+  CHANNEL_NOT_CACHED: 'Could not find the channel where this message came from in the cache!',
   STAGE_CHANNEL_RESOLVE: 'Could not resolve channel to a stage channel.',
 
   INVALID_TYPE: (name, expected, an = false) => `Supplied ${name} is not a${an ? 'n' : ''} ${expected}.`,
   INVALID_ELEMENT: (type, name, elem) => `Supplied ${type} ${name} includes an invalid element: ${elem}`,
 
   MESSAGE_THREAD_PARENT: 'The message was not sent in a guild text or news channel',
+  MESSAGE_EXISTING_THREAD: 'The message already has a thread',
+  THREAD_INVITABLE_TYPE: type => `Invitable cannot be edited on ${type}`,
 
   WEBHOOK_MESSAGE: 'The message was not sent by a webhook.',
   WEBHOOK_TOKEN_UNAVAILABLE: 'This action requires a webhook token, but none is available.',
+  WEBHOOK_URL_INVALID: 'The provided webhook URL is not valid.',
+  WEBHOOK_APPLICATION: 'This message webhook belongs to an application and cannot be fetched.',
   MESSAGE_REFERENCE_MISSING: 'The message does not reference another message',
 
   EMOJI_TYPE: 'Emoji must be a string or GuildEmoji/ReactionEmoji',
@@ -127,22 +131,23 @@ const Messages = {
     "or from a guild's application command manager.",
   GUILD_UNCACHED_ROLE_RESOLVE: 'Cannot resolve roles from an arbitrary guild, provide an id instead',
 
-  INTERACTION_ALREADY_REPLIED: 'This interaction has already been deferred or replied to.',
-  INTERACTION_NOT_REPLIED: 'This interaction has not been deferred or replied to.',
-  INTERACTION_EPHEMERAL_REPLIED: 'Ephemeral responses cannot be fetched or deleted.',
-  INTERACTION_FETCH_EPHEMERAL: 'Ephemeral responses cannot be fetched.',
+  INTERACTION_ALREADY_REPLIED: 'The reply to this interaction has already been sent or deferred.',
+  INTERACTION_NOT_REPLIED: 'The reply to this interaction has not been sent or deferred.',
+  INTERACTION_EPHEMERAL_REPLIED: 'Ephemeral responses cannot be deleted.',
 
   COMMAND_INTERACTION_OPTION_NOT_FOUND: name => `Required option "${name}" not found.`,
   COMMAND_INTERACTION_OPTION_TYPE: (name, type, expected) =>
     `Option "${name}" is of type: ${type}; expected ${expected}.`,
   COMMAND_INTERACTION_OPTION_EMPTY: (name, type) =>
     `Required option "${name}" is of type: ${type}; expected a non-empty value.`,
-  COMMAND_INTERACTION_OPTION_NO_SUB_COMMAND: 'No sub-command specified for interaction.',
-  COMMAND_INTERACTION_OPTION_NO_SUB_COMMAND_GROUP: 'No sub-command group specified for interaction.',
+  COMMAND_INTERACTION_OPTION_NO_SUB_COMMAND: 'No subcommand specified for interaction.',
+  COMMAND_INTERACTION_OPTION_NO_SUB_COMMAND_GROUP: 'No subcommand group specified for interaction.',
 
   INVITE_MISSING_SCOPES: 'At least one valid scope must be provided for the invite',
 
   NOT_IMPLEMENTED: (what, name) => `Method ${what} not implemented on ${name}.`,
+
+  SWEEP_FILTER_RETURN: 'The return value of the sweepFilter function was not false or a Function',
 };
 
 for (const [name, message] of Object.entries(Messages)) register(name, message);

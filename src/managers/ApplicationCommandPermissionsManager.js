@@ -1,8 +1,8 @@
 'use strict';
 
+const { Collection } = require('@discordjs/collection');
 const BaseManager = require('./BaseManager');
 const { Error, TypeError } = require('../errors');
-const Collection = require('../util/Collection');
 const { ApplicationCommandPermissionTypes, APIErrors } = require('../util/Constants');
 
 /**
@@ -16,6 +16,7 @@ class ApplicationCommandPermissionsManager extends BaseManager {
     /**
      * The manager or command that this manager belongs to
      * @type {ApplicationCommandManager|ApplicationCommand}
+     * @private
      */
     this.manager = manager;
 
@@ -123,7 +124,7 @@ class ApplicationCommandPermissionsManager extends BaseManager {
    * @typedef {BaseApplicationCommandPermissionsOptions} SetApplicationCommandPermissionsOptions
    * @param {ApplicationCommandPermissionData[]} [permissions] The new permissions for the command
    * @param {GuildApplicationCommandPermissionData[]} [fullPermissions] The new permissions for all commands
-   * in a guild <warn>When this parameter is set, permissions and command are ignored</warn>
+   * in a guild <warn>When this parameter is set, `permissions` and `command` are ignored</warn>
    */
 
   /**
@@ -132,12 +133,13 @@ class ApplicationCommandPermissionsManager extends BaseManager {
    * @returns {Promise<ApplicationCommandPermissions[]|Collection<Snowflake, ApplicationCommandPermissions[]>>}
    * @example
    * // Set the permissions for one command
-   * client.application.commands.permissions.set({ command: '123456789012345678', permissions: [
-   *   {
-   *     id: '876543210987654321',
-   *     type: 'USER',
-   *     permission: false,
-   *   },
+   * client.application.commands.permissions.set({ guild: '892455839386304532', command: '123456789012345678',
+   *  permissions: [
+   *    {
+   *      id: '876543210987654321',
+   *      type: 'USER',
+   *      permission: false,
+   *    },
    * ]})
    *   .then(console.log)
    *   .catch(console.error);
@@ -379,9 +381,7 @@ class ApplicationCommandPermissionsManager extends BaseManager {
       if (!commandId && this.guild) {
         commandId = this.guild.commands.resolveId(command);
       }
-      if (!commandId) {
-        commandId = this.client.application?.commands.resolveId(command);
-      }
+      commandId ??= this.client.application?.commands.resolveId(command);
       if (!commandId) {
         throw new TypeError('INVALID_TYPE', 'command', 'ApplicationCommandResolvable', true);
       }
@@ -410,7 +410,8 @@ class ApplicationCommandPermissionsManager extends BaseManager {
 
 module.exports = ApplicationCommandPermissionsManager;
 
+/* eslint-disable max-len */
 /**
  * @external APIApplicationCommandPermissions
- * @see {@link https://discord.com/developers/docs/interactions/slash-commands#applicationcommandpermissions}
+ * @see {@link https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-application-command-permissions-structure}
  */

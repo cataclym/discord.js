@@ -1,7 +1,7 @@
 'use strict';
 
 const Package = (exports.Package = require('../../package.json'));
-const { Error, RangeError } = require('../errors');
+const { Error, RangeError, TypeError } = require('../errors');
 
 exports.UserAgent = `DiscordBot (${Package.homepage.split('#')[0]}, ${Package.version}) Node.js/${process.version}`;
 
@@ -19,6 +19,7 @@ const AllowedImageFormats = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
 const AllowedImageSizes = Array.from({ length: 9 }, (e, i) => 2 ** (i + 4));
 
 function makeImageUrl(root, { format = 'webp', size } = {}) {
+  if (!['undefined', 'number'].includes(typeof size)) throw new TypeError('INVALID_TYPE', 'size', 'number');
   if (format && !AllowedImageFormats.includes(format)) throw new Error('IMAGE_FORMAT', format);
   if (size && !AllowedImageSizes.includes(size)) throw new RangeError('IMAGE_SIZE', size);
   return `${root}.${format}${size ? `?size=${size}` : ''}`;
@@ -27,48 +28,49 @@ function makeImageUrl(root, { format = 'webp', size } = {}) {
 /**
  * Options for Image URLs.
  * @typedef {StaticImageURLOptions} ImageURLOptions
- * @property {boolean} [dynamic] If true, the format will dynamically change to `gif` for
- * animated avatars; the default is false
+ * @property {boolean} [dynamic=false] If true, the format will dynamically change to `gif` for animated avatars.
  */
 
 /**
  * Options for static Image URLs.
  * @typedef {Object} StaticImageURLOptions
- * @property {string} [format] One of `webp`, `png`, `jpg`, `jpeg`, `gif`. If no format is provided,
- * defaults to `webp`
+ * @property {string} [format='webp'] One of `webp`, `png`, `jpg`, `jpeg`.
  * @property {number} [size] One of `16`, `32`, `64`, `128`, `256`, `512`, `1024`, `2048`, `4096`
  */
 
+// https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints
 exports.Endpoints = {
   CDN(root) {
     return {
-      Emoji: (emojiId, format = 'png') => `${root}/emojis/${emojiId}.${format}`,
+      Emoji: (emojiId, format = 'webp') => `${root}/emojis/${emojiId}.${format}`,
       Asset: name => `${root}/assets/${name}`,
       DefaultAvatar: discriminator => `${root}/embed/avatars/${discriminator}.png`,
-      Avatar: (userId, hash, format = 'webp', size, dynamic = false) => {
-        if (dynamic) format = hash.startsWith('a_') ? 'gif' : format;
+      Avatar: (userId, hash, format, size, dynamic = false) => {
+        if (dynamic && hash.startsWith('a_')) format = 'gif';
         return makeImageUrl(`${root}/avatars/${userId}/${hash}`, { format, size });
       },
-      Banner: (guildId, hash, format = 'webp', size) =>
-        makeImageUrl(`${root}/banners/${guildId}/${hash}`, { format, size }),
-      Icon: (guildId, hash, format = 'webp', size, dynamic = false) => {
-        if (dynamic) format = hash.startsWith('a_') ? 'gif' : format;
+      GuildMemberAvatar: (guildId, memberId, hash, format = 'webp', size, dynamic = false) => {
+        if (dynamic && hash.startsWith('a_')) format = 'gif';
+        return makeImageUrl(`${root}/guilds/${guildId}/users/${memberId}/avatars/${hash}`, { format, size });
+      },
+      Banner: (id, hash, format, size, dynamic = false) => {
+        if (dynamic && hash.startsWith('a_')) format = 'gif';
+        return makeImageUrl(`${root}/banners/${id}/${hash}`, { format, size });
+      },
+      Icon: (guildId, hash, format, size, dynamic = false) => {
+        if (dynamic && hash.startsWith('a_')) format = 'gif';
         return makeImageUrl(`${root}/icons/${guildId}/${hash}`, { format, size });
       },
-      AppIcon: (clientId, hash, { format = 'webp', size } = {}) =>
-        makeImageUrl(`${root}/app-icons/${clientId}/${hash}`, { size, format }),
-      AppAsset: (clientId, hash, { format = 'webp', size } = {}) =>
-        makeImageUrl(`${root}/app-assets/${clientId}/${hash}`, { size, format }),
-      StickerPackBanner: (bannerId, format = 'webp', size) =>
+      AppIcon: (appId, hash, options) => makeImageUrl(`${root}/app-icons/${appId}/${hash}`, options),
+      AppAsset: (appId, hash, options) => makeImageUrl(`${root}/app-assets/${appId}/${hash}`, options),
+      StickerPackBanner: (bannerId, format, size) =>
         makeImageUrl(`${root}/app-assets/710982414301790216/store/${bannerId}`, { size, format }),
-      GDMIcon: (channelId, hash, format = 'webp', size) =>
+      GDMIcon: (channelId, hash, format, size) =>
         makeImageUrl(`${root}/channel-icons/${channelId}/${hash}`, { size, format }),
-      Splash: (guildId, hash, format = 'webp', size) =>
-        makeImageUrl(`${root}/splashes/${guildId}/${hash}`, { size, format }),
-      DiscoverySplash: (guildId, hash, format = 'webp', size) =>
+      Splash: (guildId, hash, format, size) => makeImageUrl(`${root}/splashes/${guildId}/${hash}`, { size, format }),
+      DiscoverySplash: (guildId, hash, format, size) =>
         makeImageUrl(`${root}/discovery-splashes/${guildId}/${hash}`, { size, format }),
-      TeamIcon: (teamId, hash, { format = 'webp', size } = {}) =>
-        makeImageUrl(`${root}/team-icons/${teamId}/${hash}`, { size, format }),
+      TeamIcon: (teamId, hash, options) => makeImageUrl(`${root}/team-icons/${teamId}/${hash}`, options),
       Sticker: (stickerId, stickerFormat) =>
         `${root}/stickers/${stickerId}.${stickerFormat === 'LOTTIE' ? 'json' : 'png'}`,
     };
@@ -262,6 +264,7 @@ exports.PartialTypes = keyMirror(['USER', 'CHANNEL', 'GUILD_MEMBER', 'MESSAGE', 
  * * STAGE_INSTANCE_DELETE
  * * GUILD_STICKERS_UPDATE
  * @typedef {string} WSEventType
+ * @see {@link https://discord.com/developers/docs/topics/gateway#commands-and-events-gateway-events}
  */
 exports.WSEvents = keyMirror([
   'READY',
@@ -332,6 +335,7 @@ exports.WSEvents = keyMirror([
  * * `gdm.join`: allows joining the user to a group dm
  * * `webhook.incoming`: generates a webhook to a channel
  * @typedef {string} InviteScope
+ * @see {@link https://discord.com/developers/docs/topics/oauth2#shared-resources-oauth2-scopes}
  */
 exports.InviteScopes = [
   'applications.builds.read',
@@ -348,6 +352,16 @@ exports.InviteScopes = [
   'webhook.incoming',
 ];
 
+// TODO: change Integration#expireBehavior to this and clean up Integration
+/**
+ * The behavior of expiring subscribers for Integrations. This can be:
+ * * REMOVE_ROLE
+ * * KICK
+ * @typedef {string} IntegrationExpireBehavior
+ * @see {@link https://discord.com/developers/docs/resources/guild#integration-object-integration-expire-behaviors}
+ */
+exports.IntegrationExpireBehaviors = createEnum(['REMOVE_ROLE', 'KICK']);
+
 /**
  * The type of a message, e.g. `DEFAULT`. Here are the available types:
  * * DEFAULT
@@ -356,7 +370,7 @@ exports.InviteScopes = [
  * * CALL
  * * CHANNEL_NAME_CHANGE
  * * CHANNEL_ICON_CHANGE
- * * PINS_ADD
+ * * CHANNEL_PINNED_MESSAGE
  * * GUILD_MEMBER_JOIN
  * * USER_PREMIUM_GUILD_SUBSCRIPTION
  * * USER_PREMIUM_GUILD_SUBSCRIPTION_TIER_1
@@ -372,7 +386,9 @@ exports.InviteScopes = [
  * * APPLICATION_COMMAND
  * * THREAD_STARTER_MESSAGE
  * * GUILD_INVITE_REMINDER
+ * * CONTEXT_MENU_COMMAND
  * @typedef {string} MessageType
+ * @see {@link https://discord.com/developers/docs/resources/channel#message-object-message-types}
  */
 exports.MessageTypes = [
   'DEFAULT',
@@ -381,7 +397,7 @@ exports.MessageTypes = [
   'CALL',
   'CHANNEL_NAME_CHANGE',
   'CHANNEL_ICON_CHANGE',
-  'PINS_ADD',
+  'CHANNEL_PINNED_MESSAGE',
   'GUILD_MEMBER_JOIN',
   'USER_PREMIUM_GUILD_SUBSCRIPTION',
   'USER_PREMIUM_GUILD_SUBSCRIPTION_TIER_1',
@@ -398,6 +414,7 @@ exports.MessageTypes = [
   'APPLICATION_COMMAND',
   'THREAD_STARTER_MESSAGE',
   'GUILD_INVITE_REMINDER',
+  'CONTEXT_MENU_COMMAND',
 ];
 
 /**
@@ -405,15 +422,16 @@ exports.MessageTypes = [
  * * DEFAULT
  * * REPLY
  * * APPLICATION_COMMAND
+ * * CONTEXT_MENU_COMMAND
  * @typedef {string} SystemMessageType
  */
 exports.SystemMessageTypes = exports.MessageTypes.filter(
-  type => type && !['DEFAULT', 'REPLY', 'APPLICATION_COMMAND'].includes(type),
+  type => type && !['DEFAULT', 'REPLY', 'APPLICATION_COMMAND', 'CONTEXT_MENU_COMMAND'].includes(type),
 );
 
 /**
  * <info>Bots cannot set a `CUSTOM` activity type, it is only for custom statuses received from users</info>
- * The type of an activity of a users presence, e.g. `PLAYING`. Here are the available types:
+ * The type of an activity of a user's presence. Here are the available types:
  * * PLAYING
  * * STREAMING
  * * LISTENING
@@ -421,6 +439,7 @@ exports.SystemMessageTypes = exports.MessageTypes.filter(
  * * CUSTOM
  * * COMPETING
  * @typedef {string} ActivityType
+ * @see {@link https://discord.com/developers/docs/game-sdk/activities#data-models-activitytype-enum}
  */
 exports.ActivityTypes = createEnum(['PLAYING', 'STREAMING', 'LISTENING', 'WATCHING', 'CUSTOM', 'COMPETING']);
 
@@ -439,6 +458,7 @@ exports.ActivityTypes = createEnum(['PLAYING', 'STREAMING', 'LISTENING', 'WATCHI
  * * `GUILD_STAGE_VOICE` - a guild stage voice channel
  * * `UNKNOWN` - a generic channel of unknown type, could be Channel or GuildChannel
  * @typedef {string} ChannelType
+ * @see {@link https://discord.com/developers/docs/resources/channel#channel-object-channel-types}
  */
 exports.ChannelTypes = createEnum([
   'GUILD_TEXT',
@@ -455,6 +475,15 @@ exports.ChannelTypes = createEnum([
   'GUILD_PRIVATE_THREAD',
   'GUILD_STAGE_VOICE',
 ]);
+
+/**
+ * The channels that are text-based.
+ * * DMChannel
+ * * TextChannel
+ * * NewsChannel
+ * * ThreadChannel
+ * @typedef {DMChannel|TextChannel|NewsChannel|ThreadChannel} TextBasedChannels
+ */
 
 /**
  * The types of channels that are text-based. The available types are:
@@ -536,6 +565,7 @@ exports.Colors = {
  * * MEMBERS_WITHOUT_ROLES
  * * ALL_MEMBERS
  * @typedef {string} ExplicitContentFilterLevel
+ * @see {@link https://discord.com/developers/docs/resources/guild#guild-object-explicit-content-filter-level}
  */
 exports.ExplicitContentFilterLevels = createEnum(['DISABLED', 'MEMBERS_WITHOUT_ROLES', 'ALL_MEMBERS']);
 
@@ -547,6 +577,7 @@ exports.ExplicitContentFilterLevels = createEnum(['DISABLED', 'MEMBERS_WITHOUT_R
  * * HIGH
  * * VERY_HIGH
  * @typedef {string} VerificationLevel
+ * @see {@link https://discord.com/developers/docs/resources/guild#guild-object-verification-level}
  */
 exports.VerificationLevels = createEnum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH']);
 
@@ -579,6 +610,8 @@ exports.VerificationLevels = createEnum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_
  * * UNKNOWN_STORE_DIRECTORY_LAYOUT
  * * UNKNOWN_REDISTRIBUTABLE
  * * UNKNOWN_GIFT_CODE
+ * * UNKNOWN_STREAM
+ * * UNKNOWN_PREMIUM_SERVER_SUBSCRIBE_COOLDOWN
  * * UNKNOWN_GUILD_TEMPLATE
  * * UNKNOWN_DISCOVERABLE_SERVER_CATEGORY
  * * UNKNOWN_STICKER
@@ -588,6 +621,8 @@ exports.VerificationLevels = createEnum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_
  * * UNKNOWN_STAGE_INSTANCE
  * * UNKNOWN_GUILD_MEMBER_VERIFICATION_FORM
  * * UNKNOWN_GUILD_WELCOME_SCREEN
+ * * UNKNOWN_GUILD_SCHEDULED_EVENT
+ * * UNKNOWN_GUILD_SCHEDULED_EVENT_USER
  * * BOT_PROHIBITED_ENDPOINT
  * * BOT_ONLY_ENDPOINT
  * * CANNOT_SEND_EXPLICIT_CONTENT
@@ -616,6 +651,8 @@ exports.VerificationLevels = createEnum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_
  * * MAXIMUM_NON_GUILD_MEMBERS_BANS
  * * MAXIMUM_BAN_FETCHES
  * * MAXIMUM_NUMBER_OF_STICKERS_REACHED
+ * * MAXIMUM_PRUNE_REQUESTS
+ * * MAXIMUM_GUILD_WIDGET_SETTINGS_UPDATE
  * * UNAUTHORIZED
  * * ACCOUNT_VERIFICATION_REQUIRED
  * * DIRECT_MESSAGES_TOO_FAST
@@ -660,16 +697,21 @@ exports.VerificationLevels = createEnum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_
  * * INVALID_OPERATION_ON_ARCHIVED_THREAD
  * * INVALID_THREAD_NOTIFICATION_SETTINGS
  * * PARAMETER_EARLIER_THAN_CREATION
+ * * GUILD_NOT_AVAILABLE_IN_LOCATION
+ * * GUILD_MONETIZATION_REQUIRED
+ * * INSUFFICIENT_BOOSTS
  * * TWO_FACTOR_REQUIRED
  * * NO_USERS_WITH_DISCORDTAG_EXIST
  * * REACTION_BLOCKED
  * * RESOURCE_OVERLOADED
  * * STAGE_ALREADY_OPEN
+ * * CANNOT_REPLY_WITHOUT_READ_MESSAGE_HISTORY_PERMISSION
  * * MESSAGE_ALREADY_HAS_THREAD
  * * THREAD_LOCKED
  * * MAXIMUM_ACTIVE_THREADS
  * * MAXIMUM_ACTIVE_ANNOUCEMENT_THREAD
  * @typedef {string} APIError
+ * @see {@link https://discord.com/developers/docs/topics/opcodes-and-status-codes#json-json-error-codes}
  */
 exports.APIErrors = {
   UNKNOWN_ACCOUNT: 10001,
@@ -699,6 +741,8 @@ exports.APIErrors = {
   UNKNOWN_STORE_DIRECTORY_LAYOUT: 10033,
   UNKNOWN_REDISTRIBUTABLE: 10036,
   UNKNOWN_GIFT_CODE: 10038,
+  UNKNOWN_STREAM: 10049,
+  UNKNOWN_PREMIUM_SERVER_SUBSCRIBE_COOLDOWN: 10050,
   UNKNOWN_GUILD_TEMPLATE: 10057,
   UNKNOWN_DISCOVERABLE_SERVER_CATEGORY: 10059,
   UNKNOWN_STICKER: 10060,
@@ -708,6 +752,8 @@ exports.APIErrors = {
   UNKNOWN_STAGE_INSTANCE: 10067,
   UNKNOWN_GUILD_MEMBER_VERIFICATION_FORM: 10068,
   UNKNOWN_GUILD_WELCOME_SCREEN: 10069,
+  UNKNOWN_GUILD_SCHEDULED_EVENT: 10070,
+  UNKNOWN_GUILD_SCHEDULED_EVENT_USER: 10071,
   BOT_PROHIBITED_ENDPOINT: 20001,
   BOT_ONLY_ENDPOINT: 20002,
   CANNOT_SEND_EXPLICIT_CONTENT: 20009,
@@ -737,6 +783,8 @@ exports.APIErrors = {
   MAXIMUM_NON_GUILD_MEMBERS_BANS: 30035,
   MAXIMUM_BAN_FETCHES: 30037,
   MAXIMUM_NUMBER_OF_STICKERS_REACHED: 30039,
+  MAXIMUM_PRUNE_REQUESTS: 30040,
+  MAXIMUM_GUILD_WIDGET_SETTINGS_UPDATE: 30042,
   UNAUTHORIZED: 40001,
   ACCOUNT_VERIFICATION_REQUIRED: 40002,
   DIRECT_MESSAGES_TOO_FAST: 40003,
@@ -783,11 +831,15 @@ exports.APIErrors = {
   INVALID_OPERATION_ON_ARCHIVED_THREAD: 50083,
   INVALID_THREAD_NOTIFICATION_SETTINGS: 50084,
   PARAMETER_EARLIER_THAN_CREATION: 50085,
+  GUILD_NOT_AVAILABLE_IN_LOCATION: 50095,
+  GUILD_MONETIZATION_REQUIRED: 50097,
+  INSUFFICIENT_BOOSTS: 50101,
   TWO_FACTOR_REQUIRED: 60003,
   NO_USERS_WITH_DISCORDTAG_EXIST: 80004,
   REACTION_BLOCKED: 90001,
   RESOURCE_OVERLOADED: 130000,
   STAGE_ALREADY_OPEN: 150006,
+  CANNOT_REPLY_WITHOUT_READ_MESSAGE_HISTORY_PERMISSION: 160002,
   MESSAGE_ALREADY_HAS_THREAD: 160004,
   THREAD_LOCKED: 160005,
   MAXIMUM_ACTIVE_THREADS: 160006,
@@ -806,14 +858,16 @@ exports.APIErrors = {
  * * ALL_MESSAGES
  * * ONLY_MENTIONS
  * @typedef {string} DefaultMessageNotificationLevel
+ * @see {@link https://discord.com/developers/docs/resources/guild#guild-object-default-message-notification-level}
  */
 exports.DefaultMessageNotificationLevels = createEnum(['ALL_MESSAGES', 'ONLY_MENTIONS']);
 
 /**
- * The value set for a team members's membership state:
+ * The value set for a team member's membership state:
  * * INVITED
  * * ACCEPTED
  * @typedef {string} MembershipState
+ * @see {@link https://discord.com/developers/docs/topics/teams#data-models-membership-state-enum}
  */
 exports.MembershipStates = createEnum([null, 'INVITED', 'ACCEPTED']);
 
@@ -821,15 +875,18 @@ exports.MembershipStates = createEnum([null, 'INVITED', 'ACCEPTED']);
  * The value set for a webhook's type:
  * * Incoming
  * * Channel Follower
+ * * Application
  * @typedef {string} WebhookType
+ * @see {@link https://discord.com/developers/docs/resources/webhook#webhook-object-webhook-types}
  */
-exports.WebhookTypes = createEnum([null, 'Incoming', 'Channel Follower']);
+exports.WebhookTypes = createEnum([null, 'Incoming', 'Channel Follower', 'Application']);
 
 /**
  * The value set for a sticker's type:
  * * STANDARD
  * * GUILD
- * @typedef {string} StickerFormatType
+ * @typedef {string} StickerType
+ * @see {@link https://discord.com/developers/docs/resources/sticker#sticker-object-sticker-types}
  */
 exports.StickerTypes = createEnum([null, 'STANDARD', 'GUILD']);
 
@@ -839,6 +896,7 @@ exports.StickerTypes = createEnum([null, 'STANDARD', 'GUILD']);
  * * APNG
  * * LOTTIE
  * @typedef {string} StickerFormatType
+ * @see {@link https://discord.com/developers/docs/resources/sticker#sticker-object-sticker-format-types}
  */
 exports.StickerFormatTypes = createEnum([null, 'PNG', 'APNG', 'LOTTIE']);
 
@@ -847,8 +905,20 @@ exports.StickerFormatTypes = createEnum([null, 'PNG', 'APNG', 'LOTTIE']);
  * * role
  * * member
  * @typedef {string} OverwriteType
+ * @see {@link https://discord.com/developers/docs/resources/channel#overwrite-object-overwrite-structure}
  */
 exports.OverwriteTypes = createEnum(['role', 'member']);
+
+/* eslint-disable max-len */
+/**
+ * The type of an {@link ApplicationCommand} object:
+ * * CHAT_INPUT
+ * * USER
+ * * MESSAGE
+ * @typedef {string} ApplicationCommandType
+ * @see {@link https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types}
+ */
+exports.ApplicationCommandTypes = createEnum([null, 'CHAT_INPUT', 'USER', 'MESSAGE']);
 
 /**
  * The type of an {@link ApplicationCommandOption} object:
@@ -863,6 +933,7 @@ exports.OverwriteTypes = createEnum(['role', 'member']);
  * * MENTIONABLE
  * * NUMBER
  * @typedef {string} ApplicationCommandOptionType
+ * @see {@link https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type}
  */
 exports.ApplicationCommandOptionTypes = createEnum([
   null,
@@ -883,6 +954,7 @@ exports.ApplicationCommandOptionTypes = createEnum([
  * * ROLE
  * * USER
  * @typedef {string} ApplicationCommandPermissionType
+ * @see {@link https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-application-command-permission-type}
  */
 exports.ApplicationCommandPermissionTypes = createEnum([null, 'ROLE', 'USER']);
 
@@ -892,6 +964,7 @@ exports.ApplicationCommandPermissionTypes = createEnum([null, 'ROLE', 'USER']);
  * * APPLICATION_COMMAND
  * * MESSAGE_COMPONENT
  * @typedef {string} InteractionType
+ * @see {@link https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-type}
  */
 exports.InteractionTypes = createEnum([null, 'PING', 'APPLICATION_COMMAND', 'MESSAGE_COMPONENT']);
 
@@ -903,6 +976,7 @@ exports.InteractionTypes = createEnum([null, 'PING', 'APPLICATION_COMMAND', 'MES
  * * DEFERRED_MESSAGE_UPDATE
  * * UPDATE_MESSAGE
  * @typedef {string} InteractionResponseType
+ * @see {@link https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-callback-type}
  */
 exports.InteractionResponseTypes = createEnum([
   null,
@@ -914,6 +988,7 @@ exports.InteractionResponseTypes = createEnum([
   'DEFERRED_MESSAGE_UPDATE',
   'UPDATE_MESSAGE',
 ]);
+/* eslint-enable max-len */
 
 /**
  * The type of a message component
@@ -921,6 +996,7 @@ exports.InteractionResponseTypes = createEnum([
  * * BUTTON
  * * SELECT_MENU
  * @typedef {string} MessageComponentType
+ * @see {@link https://discord.com/developers/docs/interactions/message-components#component-object-component-types}
  */
 exports.MessageComponentTypes = createEnum([null, 'ACTION_ROW', 'BUTTON', 'SELECT_MENU']);
 
@@ -932,6 +1008,7 @@ exports.MessageComponentTypes = createEnum([null, 'ACTION_ROW', 'BUTTON', 'SELEC
  * * DANGER
  * * LINK
  * @typedef {string} MessageButtonStyle
+ * @see {@link https://discord.com/developers/docs/interactions/message-components#button-object-button-styles}
  */
 exports.MessageButtonStyles = createEnum([null, 'PRIMARY', 'SECONDARY', 'SUCCESS', 'DANGER', 'LINK']);
 
@@ -940,6 +1017,7 @@ exports.MessageButtonStyles = createEnum([null, 'PRIMARY', 'SECONDARY', 'SUCCESS
  * * NONE
  * * ELEVATED
  * @typedef {string} MFALevel
+ * @see {@link https://discord.com/developers/docs/resources/guild#guild-object-mfa-level}
  */
 exports.MFALevels = createEnum(['NONE', 'ELEVATED']);
 
@@ -950,6 +1028,7 @@ exports.MFALevels = createEnum(['NONE', 'ELEVATED']);
  * * SAFE
  * * AGE_RESTRICTED
  * @typedef {string} NSFWLevel
+ * @see {@link https://discord.com/developers/docs/resources/guild#guild-object-guild-nsfw-level}
  */
 exports.NSFWLevels = createEnum(['DEFAULT', 'EXPLICIT', 'SAFE', 'AGE_RESTRICTED']);
 
@@ -958,6 +1037,7 @@ exports.NSFWLevels = createEnum(['DEFAULT', 'EXPLICIT', 'SAFE', 'AGE_RESTRICTED'
  * * PUBLIC
  * * GUILD_ONLY
  * @typedef {string} PrivacyLevel
+ * @see {@link https://discord.com/developers/docs/resources/stage-instance#stage-instance-object-privacy-level}
  */
 exports.PrivacyLevels = createEnum([null, 'PUBLIC', 'GUILD_ONLY']);
 
@@ -968,8 +1048,11 @@ exports.PrivacyLevels = createEnum([null, 'PUBLIC', 'GUILD_ONLY']);
  * * TIER_2
  * * TIER_3
  * @typedef {string} PremiumTier
+ * @see {@link https://discord.com/developers/docs/resources/guild#guild-object-premium-tier}
  */
 exports.PremiumTiers = createEnum(['NONE', 'TIER_1', 'TIER_2', 'TIER_3']);
+
+exports._cleanupSymbol = Symbol('djsCleanup');
 
 function keyMirror(arr) {
   let tmp = Object.create(null);
@@ -986,3 +1069,35 @@ function createEnum(keys) {
   }
   return obj;
 }
+
+/**
+ * @typedef {Object} Constants Constants that can be used in an enum or object-like way.
+ * @property {ActivityType} ActivityTypes The type of an activity of a users presence.
+ * @property {APIError} APIErrors An error encountered while performing an API request.
+ * @property {ApplicationCommandOptionType} ApplicationCommandOptionTypes
+ * The type of an {@link ApplicationCommandOption} object.
+ * @property {ApplicationCommandPermissionType} ApplicationCommandPermissionTypes
+ * The type of an {@link ApplicationCommandPermissions} object.
+ * @property {ChannelType} ChannelTypes All available channel types.
+ * @property {DefaultMessageNotificationLevel} DefaultMessageNotificationLevels
+ * The value set for a guild's default message notifications.
+ * @property {ExplicitContentFilterLevel} ExplicitContentFilterLevels
+ * The value set for the explicit content filter levels for a guild.
+ * @property {InteractionResponseType} InteractionResponseTypes The type of an interaction response.
+ * @property {InteractionType} InteractionTypes The type of an {@link Interaction} object.
+ * @property {MembershipState} MembershipStates The value set for a team member's membership state.
+ * @property {MessageButtonStyle} MessageButtonStyles The style of a message button.
+ * @property {MessageComponentType} MessageComponentTypes The type of a message component.
+ * @property {MFALevel} MFALevels The required MFA level for a guild.
+ * @property {NSFWLevel} NSFWLevels NSFW level of a guild.
+ * @property {OverwriteType} OverwriteTypes An overwrite type.
+ * @property {PartialType} PartialTypes The type of Structure allowed to be a partial.
+ * @property {PremiumTier} PremiumTiers The premium tier (Server Boost level) of a guild.
+ * @property {PrivacyLevel} PrivacyLevels Privacy level of a {@link StageInstance} object.
+ * @property {Status} Status The available statuses of the client.
+ * @property {StickerFormatType} StickerFormatTypes The value set for a sticker's format type.
+ * @property {StickerType} StickerTypes The value set for a sticker's type.
+ * @property {VerificationLevel} VerificationLevels The value set for the verification levels for a guild.
+ * @property {WebhookType} WebhookTypes The value set for a webhook's type.
+ * @property {WSEventType} WSEvents The type of a websocket message event.
+ */

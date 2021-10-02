@@ -1,5 +1,6 @@
 'use strict';
 
+const { Collection } = require('@discordjs/collection');
 const CachedManager = require('./CachedManager');
 const Guild = require('../structures/Guild');
 const GuildChannel = require('../structures/GuildChannel');
@@ -8,10 +9,10 @@ const GuildMember = require('../structures/GuildMember');
 const Invite = require('../structures/Invite');
 const OAuth2Guild = require('../structures/OAuth2Guild');
 const Role = require('../structures/Role');
-const Collection = require('../util/Collection');
 const {
   ChannelTypes,
   Events,
+  OverwriteTypes,
   VerificationLevels,
   DefaultMessageNotificationLevels,
   ExplicitContentFilterLevels,
@@ -21,6 +22,8 @@ const Permissions = require('../util/Permissions');
 const SystemChannelFlags = require('../util/SystemChannelFlags');
 const { resolveColor } = require('../util/Util');
 
+let cacheWarningEmitted = false;
+
 /**
  * Manages API methods for Guilds and stores their cache.
  * @extends {CachedManager}
@@ -28,6 +31,13 @@ const { resolveColor } = require('../util/Util');
 class GuildManager extends CachedManager {
   constructor(client, iterable) {
     super(client, Guild, iterable);
+    if (!cacheWarningEmitted && this._cache.constructor.name !== 'Collection') {
+      cacheWarningEmitted = true;
+      process.emitWarning(
+        `Overriding the cache handling for ${this.constructor.name} is unsupported and breaks functionality.`,
+        'UnsupportedCacheOverwriteWarning',
+      );
+    }
   }
 
   /**
@@ -63,8 +73,8 @@ class GuildManager extends CachedManager {
   /**
    * Partial overwrite data.
    * @typedef {Object} PartialOverwriteData
-   * @property {Snowflake|number} id The {@link Role} or {@link User} id for this overwrite
-   * @property {string} [type] The type of this overwrite
+   * @property {Snowflake|number} id The id of the {@link Role} or {@link User} this overwrite belongs to
+   * @property {OverwriteType} [type] The type of this overwrite
    * @property {PermissionResolvable} [allow] The permissions to allow
    * @property {PermissionResolvable} [deny] The permissions to deny
    */
@@ -75,7 +85,7 @@ class GuildManager extends CachedManager {
    * @property {Snowflake|number} [id] The channel's id, used to set its parent,
    * this is a placeholder and will be replaced by the API after consumption
    * @property {Snowflake|number} [parentId] The parent id for this channel
-   * @property {ChannelType} [type] The type of the channel
+   * @property {ChannelType|number} [type] The type of the channel
    * @property {string} name The name of the channel
    * @property {string} [topic] The topic of the text channel
    * @property {boolean} [nsfw] Whether the channel is NSFW
@@ -134,10 +144,10 @@ class GuildManager extends CachedManager {
    * @property {Snowflake|number} [afkChannelId] The AFK channel's id
    * @property {number} [afkTimeout] The AFK timeout in seconds
    * @property {PartialChannelData[]} [channels=[]] The channels for this guild
-   * @property {DefaultMessageNotifications} [defaultMessageNotifications] The default message notifications
+   * @property {DefaultMessageNotificationLevel|number} [defaultMessageNotifications] The default message notifications
    * for the guild
    * @property {ExplicitContentFilterLevel} [explicitContentFilter] The explicit content filter level for the guild
-   * @property {BufferResolvable|Base64Resolvable} [icon=null] The icon for the guild
+   * @property {?(BufferResolvable|Base64Resolvable)} [icon=null] The icon for the guild
    * @property {PartialRoleData[]} [roles=[]] The roles for this guild,
    * the first element of this array is used to change properties of the guild's everyone role.
    * @property {Snowflake|number} [systemChannelId] The system channel's id
@@ -179,10 +189,18 @@ class GuildManager extends CachedManager {
     }
     for (const channel of channels) {
       if (channel.type) channel.type = ChannelTypes[channel.type.toUpperCase()];
+      if (channel.type) channel.type = typeof channel.type === 'number' ? channel.type : ChannelTypes[channel.type];
       channel.parent_id = channel.parentId;
       delete channel.parentId;
+      channel.user_limit = channel.userLimit;
+      delete channel.userLimit;
+      channel.rate_limit_per_user = channel.rateLimitPerUser;
+      delete channel.rateLimitPerUser;
       if (!channel.permissionOverwrites) continue;
       for (const overwrite of channel.permissionOverwrites) {
+        if (typeof overwrite.type === 'string') {
+          overwrite.type = OverwriteTypes[overwrite.type];
+        }
         if (overwrite.allow) overwrite.allow = Permissions.resolve(overwrite.allow).toString();
         if (overwrite.deny) overwrite.deny = Permissions.resolve(overwrite.deny).toString();
       }
@@ -195,51 +213,49 @@ class GuildManager extends CachedManager {
     }
     if (systemChannelFlags) systemChannelFlags = SystemChannelFlags.resolve(systemChannelFlags);
 
-    return new Promise((resolve, reject) =>
-      this.client.api.guilds
-        .post({
-          data: {
-            name,
-            icon,
-            verification_level: verificationLevel,
-            default_message_notifications: defaultMessageNotifications,
-            explicit_content_filter: explicitContentFilter,
-            roles,
-            channels,
-            afk_channel_id: afkChannelId,
-            afk_timeout: afkTimeout,
-            system_channel_id: systemChannelId,
-            system_channel_flags: systemChannelFlags,
-          },
-        })
-        .then(data => {
-          if (this.client.guilds.cache.has(data.id)) return resolve(this.client.guilds.cache.get(data.id));
+    const data = await this.client.api.guilds.post({
+      data: {
+        name,
+        icon,
+        verification_level: verificationLevel,
+        default_message_notifications: defaultMessageNotifications,
+        explicit_content_filter: explicitContentFilter,
+        roles,
+        channels,
+        afk_channel_id: afkChannelId,
+        afk_timeout: afkTimeout,
+        system_channel_id: systemChannelId,
+        system_channel_flags: systemChannelFlags,
+      },
+    });
 
-          const handleGuild = guild => {
-            if (guild.id === data.id) {
-              clearTimeout(timeout);
-              this.client.removeListener(Events.GUILD_CREATE, handleGuild);
-              this.client.decrementMaxListeners();
-              resolve(guild);
-            }
-          };
-          this.client.incrementMaxListeners();
-          this.client.on(Events.GUILD_CREATE, handleGuild);
+    if (this.client.guilds.cache.has(data.id)) return this.client.guilds.cache.get(data.id);
 
-          const timeout = setTimeout(() => {
-            this.client.removeListener(Events.GUILD_CREATE, handleGuild);
-            this.client.decrementMaxListeners();
-            resolve(this.client.guilds._add(data));
-          }, 10000).unref();
-          return undefined;
-        }, reject),
-    );
+    return new Promise(resolve => {
+      const handleGuild = guild => {
+        if (guild.id === data.id) {
+          clearTimeout(timeout);
+          this.client.removeListener(Events.GUILD_CREATE, handleGuild);
+          this.client.decrementMaxListeners();
+          resolve(guild);
+        }
+      };
+      this.client.incrementMaxListeners();
+      this.client.on(Events.GUILD_CREATE, handleGuild);
+
+      const timeout = setTimeout(() => {
+        this.client.removeListener(Events.GUILD_CREATE, handleGuild);
+        this.client.decrementMaxListeners();
+        resolve(this.client.guilds._add(data));
+      }, 10_000).unref();
+    });
   }
 
   /**
    * Options used to fetch a single guild.
    * @typedef {BaseFetchOptions} FetchGuildOptions
    * @property {GuildResolvable} guild The guild to fetch
+   * @property {boolean} [withCounts=true] Whether the approximate member and presence counts should be returned
    */
 
   /**
@@ -247,7 +263,7 @@ class GuildManager extends CachedManager {
    * @typedef {Object} FetchGuildsOptions
    * @property {Snowflake} [before] Get guilds before this guild id
    * @property {Snowflake} [after] Get guilds after this guild id
-   * @property {number} [limit=100] Maximum number of guilds to request (1-100)
+   * @property {number} [limit=200] Maximum number of guilds to request (1-200)
    */
 
   /**
@@ -264,7 +280,7 @@ class GuildManager extends CachedManager {
         if (existing) return existing;
       }
 
-      const data = await this.client.api.guilds(id).get({ query: { with_counts: true } });
+      const data = await this.client.api.guilds(id).get({ query: { with_counts: options.withCounts ?? true } });
       return this._add(data, options.cache);
     }
 

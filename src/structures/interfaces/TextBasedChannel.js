@@ -4,7 +4,7 @@
 const MessageCollector = require('../MessageCollector');
 const MessagePayload = require('../MessagePayload');
 const SnowflakeUtil = require('../../util/SnowflakeUtil');
-const Collection = require('../../util/Collection');
+const { Collection } = require('@discordjs/collection');
 const { InteractionTypes } = require('../../util/Constants');
 const { TypeError, Error } = require('../../errors');
 const InteractionCollector = require('../InteractionCollector');
@@ -66,6 +66,7 @@ class TextBasedChannel {
    * @property {MessageActionRow[]|MessageActionRowOptions[]} [components]
    * Action rows containing interactive components for the message (buttons, select menus)
    * @property {StickerResolvable[]} [stickers=[]] Stickers to send in the message
+   * @property {MessageAttachment[]} [attachments] Attachments to send in the message
    */
 
   /**
@@ -155,7 +156,8 @@ class TextBasedChannel {
     const GuildMember = require('../GuildMember');
 
     if (this instanceof User || this instanceof GuildMember) {
-      return this.createDM().then(dm => dm.send(options));
+      const dm = await this.createDM();
+      return dm.send(options);
     }
 
     let messagePayload;
@@ -167,9 +169,15 @@ class TextBasedChannel {
     }
 
     const { data, files } = await messagePayload.resolveFiles();
-    return this.client.api.channels[this.id].messages
-      .post({ data, files })
-      .then(d => this.client.actions.MessageCreate.handle(d).message);
+    const d = await this.client.api.channels[this.id].messages.post({ data, files });
+
+    const existing = this.messages.cache.get(d.id);
+    if (existing) {
+      const clone = existing._clone();
+      clone._patch(d);
+      return clone;
+    }
+    return this.messages._add(d);
   }
 
   /**
@@ -190,7 +198,7 @@ class TextBasedChannel {
    * @example
    * // Create a message collector
    * const filter = m => m.content.includes('discord');
-   * const collector = channel.createMessageCollector({ filter, time: 15000 });
+   * const collector = channel.createMessageCollector({ filter, time: 15_000 });
    * collector.on('collect', m => console.log(`Collected ${m.content}`));
    * collector.on('end', collected => console.log(`Collected ${collected.size} items`));
    */
@@ -213,7 +221,7 @@ class TextBasedChannel {
    * // Await !vote messages
    * const filter = m => m.content.startsWith('!vote');
    * // Errors: ['time'] treats ending because of the time limit as an error
-   * channel.awaitMessages({ filter, max: 4, time: 60000, errors: ['time'] })
+   * channel.awaitMessages({ filter, max: 4, time: 60_000, errors: ['time'] })
    *   .then(collected => console.log(collected.size))
    *   .catch(collected => console.log(`After a minute, only ${collected.size} out of 4 voted.`));
    */
@@ -237,7 +245,7 @@ class TextBasedChannel {
    * @example
    * // Create a button interaction collector
    * const filter = (interaction) => interaction.customId === 'button' && interaction.user.id === 'someId';
-   * const collector = channel.createMessageComponentCollector({ filter, time: 15000 });
+   * const collector = channel.createMessageComponentCollector({ filter, time: 15_000 });
    * collector.on('collect', i => console.log(`Collected ${i.customId}`));
    * collector.on('end', collected => console.log(`Collected ${collected.size} items`));
    */
@@ -257,7 +265,7 @@ class TextBasedChannel {
    * @example
    * // Collect a message component interaction
    * const filter = (interaction) => interaction.customId === 'button' && interaction.user.id === 'someId';
-   * channel.awaitMessageComponent({ filter, time: 15000 })
+   * channel.awaitMessageComponent({ filter, time: 15_000 })
    *   .then(interaction => console.log(`${interaction.customId} was clicked!`))
    *   .catch(console.error);
    */
@@ -278,7 +286,7 @@ class TextBasedChannel {
    * @param {Collection<Snowflake, Message>|MessageResolvable[]|number} messages
    * Messages or number of messages to delete
    * @param {boolean} [filterOld=false] Filter messages to remove those which are older than two weeks automatically
-   * @returns {Promise<Collection<Snowflake, Message>>} Deleted messages
+   * @returns {Promise<Collection<Snowflake, Message>>} Returns the deleted messages
    * @example
    * // Bulk delete messages
    * channel.bulkDelete(5)
@@ -287,9 +295,9 @@ class TextBasedChannel {
    */
   async bulkDelete(messages, filterOld = false) {
     if (Array.isArray(messages) || messages instanceof Collection) {
-      let messageIds = messages instanceof Collection ? messages.keyArray() : messages.map(m => m.id ?? m);
+      let messageIds = messages instanceof Collection ? [...messages.keys()] : messages.map(m => m.id ?? m);
       if (filterOld) {
-        messageIds = messageIds.filter(id => Date.now() - SnowflakeUtil.deconstruct(id).timestamp < 1209600000);
+        messageIds = messageIds.filter(id => Date.now() - SnowflakeUtil.deconstruct(id).timestamp < 1_209_600_000);
       }
       if (messageIds.length === 0) return new Collection();
       if (messageIds.length === 1) {

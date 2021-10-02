@@ -9,7 +9,7 @@ let StoreChannel;
 let TextChannel;
 let ThreadChannel;
 let VoiceChannel;
-const { ChannelTypes, ThreadChannelTypes } = require('../util/Constants');
+const { ChannelTypes, ThreadChannelTypes, VoiceBasedChannelTypes } = require('../util/Constants');
 const SnowflakeUtil = require('../util/SnowflakeUtil');
 
 /**
@@ -93,11 +93,9 @@ class Channel extends Base {
    *   .then(console.log)
    *   .catch(console.error);
    */
-  delete() {
-    return this.client.api
-      .channels(this.id)
-      .delete()
-      .then(() => this);
+  async delete() {
+    await this.client.api.channels(this.id).delete();
+    return this;
   }
 
   /**
@@ -110,12 +108,19 @@ class Channel extends Base {
   }
 
   /**
-   * Indicates whether this channel is text-based
-   * ({@link TextChannel}, {@link DMChannel}, {@link NewsChannel} or {@link ThreadChannel}).
+   * Indicates whether this channel is {@link TextBasedChannels text-based}.
    * @returns {boolean}
    */
   isText() {
     return 'messages' in this;
+  }
+
+  /**
+   * Indicates whether this channel is {@link BaseGuildVoiceChannel voice-based}.
+   * @returns {boolean}
+   */
+  isVoice() {
+    return VoiceBasedChannelTypes.includes(this.type);
   }
 
   /**
@@ -126,15 +131,15 @@ class Channel extends Base {
     return ThreadChannelTypes.includes(this.type);
   }
 
-  static create(client, data, guild, { allowUnknownGuild, fromInteraction }) {
-    if (!CategoryChannel) CategoryChannel = require('./CategoryChannel');
-    if (!DMChannel) DMChannel = require('./DMChannel');
-    if (!NewsChannel) NewsChannel = require('./NewsChannel');
-    if (!StageChannel) StageChannel = require('./StageChannel');
-    if (!StoreChannel) StoreChannel = require('./StoreChannel');
-    if (!TextChannel) TextChannel = require('./TextChannel');
-    if (!ThreadChannel) ThreadChannel = require('./ThreadChannel');
-    if (!VoiceChannel) VoiceChannel = require('./VoiceChannel');
+  static create(client, data, guild, { allowUnknownGuild, fromInteraction } = {}) {
+    CategoryChannel ??= require('./CategoryChannel');
+    DMChannel ??= require('./DMChannel');
+    NewsChannel ??= require('./NewsChannel');
+    StageChannel ??= require('./StageChannel');
+    StoreChannel ??= require('./StoreChannel');
+    TextChannel ??= require('./TextChannel');
+    ThreadChannel ??= require('./ThreadChannel');
+    VoiceChannel ??= require('./VoiceChannel');
 
     let channel;
     if (!data.guild_id && !guild) {
@@ -145,7 +150,7 @@ class Channel extends Base {
         channel = new PartialGroupDMChannel(client, data);
       }
     } else {
-      if (!guild) guild = client.guilds.cache.get(data.guild_id);
+      guild ??= client.guilds.cache.get(data.guild_id);
 
       if (guild || allowUnknownGuild) {
         switch (data.type) {

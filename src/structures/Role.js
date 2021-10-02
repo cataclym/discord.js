@@ -87,7 +87,7 @@ class Role extends Base {
      * The tags this role has
      * @type {?Object}
      * @property {Snowflake} [botId] The id of the bot this role belongs to
-     * @property {Snowflake} [integrationId] The id of the integration this role belongs to
+     * @property {Snowflake|string} [integrationId] The id of the integration this role belongs to
      * @property {true} [premiumSubscriberRole] Whether this is the guild's premium subscription role
      */
     this.tags = data.tags ? {} : null;
@@ -159,7 +159,7 @@ class Role extends Base {
    */
   get position() {
     const sorted = this.guild._sortedRoles();
-    return sorted.array().indexOf(sorted.get(this.id));
+    return [...sorted.values()].indexOf(sorted.get(this.id));
   }
 
   /**
@@ -203,7 +203,7 @@ class Role extends Base {
   /**
    * Returns `channel.permissionsFor(role)`. Returns permissions for a role in a guild channel,
    * taking into account permission overwrites.
-   * @param {ChannelResolvable} channel The guild channel to use as context
+   * @param {GuildChannel|Snowflake} channel The guild channel to use as context
    * @returns {Readonly<Permissions>}
    */
   permissionsIn(channel) {
@@ -244,7 +244,7 @@ class Role extends Base {
 
   /**
    * Sets whether or not the role should be hoisted.
-   * @param {boolean} hoist Whether or not to hoist the role
+   * @param {boolean} [hoist=true] Whether or not to hoist the role
    * @param {string} [reason] Reason for setting whether or not the role should be hoisted
    * @returns {Promise<Role>}
    * @example
@@ -253,7 +253,7 @@ class Role extends Base {
    *   .then(updated => console.log(`Role hoisted: ${updated.hoist}`))
    *   .catch(console.error);
    */
-  setHoist(hoist, reason) {
+  setHoist(hoist = true, reason) {
     return this.edit({ hoist }, reason);
   }
 
@@ -279,7 +279,7 @@ class Role extends Base {
 
   /**
    * Sets whether this role is mentionable.
-   * @param {boolean} mentionable Whether this role should be mentionable
+   * @param {boolean} [mentionable=true] Whether this role should be mentionable
    * @param {string} [reason] Reason for setting whether or not this role should be mentionable
    * @returns {Promise<Role>}
    * @example
@@ -288,7 +288,7 @@ class Role extends Base {
    *   .then(updated => console.log(`Role updated ${updated.name}`))
    *   .catch(console.error);
    */
-  setMentionable(mentionable, reason) {
+  setMentionable(mentionable = true, reason) {
     return this.edit({ mentionable }, reason);
   }
 
@@ -310,21 +310,20 @@ class Role extends Base {
    *   .then(updated => console.log(`Role position: ${updated.position}`))
    *   .catch(console.error);
    */
-  setPosition(position, { relative, reason } = {}) {
-    return Util.setPosition(
+  async setPosition(position, { relative, reason } = {}) {
+    const updatedRoles = await Util.setPosition(
       this,
       position,
       relative,
       this.guild._sortedRoles(),
       this.client.api.guilds(this.guild.id).roles,
       reason,
-    ).then(updatedRoles => {
-      this.client.actions.GuildRolesPositionUpdate.handle({
-        guild_id: this.guild.id,
-        roles: updatedRoles,
-      });
-      return this;
+    );
+    this.client.actions.GuildRolesPositionUpdate.handle({
+      guild_id: this.guild.id,
+      roles: updatedRoles,
     });
+    return this;
   }
 
   /**
@@ -337,11 +336,10 @@ class Role extends Base {
    *   .then(deleted => console.log(`Deleted role ${deleted.name}`))
    *   .catch(console.error);
    */
-  delete(reason) {
-    return this.client.api.guilds[this.guild.id].roles[this.id].delete({ reason }).then(() => {
-      this.client.actions.GuildRoleDelete.handle({ guild_id: this.guild.id, role_id: this.id });
-      return this;
-    });
+  async delete(reason) {
+    await this.client.api.guilds[this.guild.id].roles[this.id].delete({ reason });
+    this.client.actions.GuildRoleDelete.handle({ guild_id: this.guild.id, role_id: this.id });
+    return this;
   }
 
   /**

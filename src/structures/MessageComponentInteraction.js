@@ -15,6 +15,12 @@ class MessageComponentInteraction extends Interaction {
     super(client, data);
 
     /**
+     * The id of the channel this interaction was sent in
+     * @type {Snowflake}
+     * @name MessageComponentInteraction#channelId
+     */
+
+    /**
      * The message to which the component was attached
      * @type {Message|APIMessage}
      */
@@ -89,7 +95,7 @@ class MessageComponentInteraction extends Interaction {
 
   // These are here only for documentation purposes - they are implemented by InteractionResponses
   /* eslint-disable no-empty-function */
-  defer() {}
+  deferReply() {}
   reply() {}
   fetchReply() {}
   editReply() {}

@@ -63,7 +63,7 @@ class MessageReaction {
    */
   async remove() {
     await this.client.api
-      .channels(this.message.channel.id)
+      .channels(this.message.channelId)
       .messages(this.message.id)
       .reactions(this._emoji.identifier)
       .delete();
@@ -71,7 +71,7 @@ class MessageReaction {
   }
 
   /**
-   * The emoji of this reaction, either an GuildEmoji object for known custom emojis, or a ReactionEmoji
+   * The emoji of this reaction. Either a {@link GuildEmoji} object for known custom emojis, or a {@link ReactionEmoji}
    * object which has fewer properties. Whatever the prototype of the emoji, it will still have
    * `name`, `id`, `identifier` and `toString()`
    * @type {GuildEmoji|ReactionEmoji}
@@ -120,7 +120,7 @@ class MessageReaction {
     if (this.partial) return;
     this.users.cache.set(user.id, user);
     if (!this.me || user.id !== this.message.client.user.id || this.count === 0) this.count++;
-    if (!this.me) this.me = user.id === this.message.client.user.id;
+    this.me ??= user.id === this.message.client.user.id;
   }
 
   _remove(user) {

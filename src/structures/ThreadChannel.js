@@ -2,6 +2,7 @@
 
 const Channel = require('./Channel');
 const TextBasedChannel = require('./interfaces/TextBasedChannel');
+const { RangeError } = require('../errors');
 const MessageManager = require('../managers/MessageManager');
 const ThreadMemberManager = require('../managers/ThreadMemberManager');
 const Permissions = require('../util/Permissions');
@@ -66,8 +67,8 @@ class ThreadChannel extends Channel {
        * @type {?Snowflake}
        */
       this.parentId = data.parent_id;
-    } else if (!this.parentId) {
-      this.parentId = null;
+    } else {
+      this.parentId ??= null;
     }
 
     if ('thread_metadata' in data) {
@@ -76,6 +77,13 @@ class ThreadChannel extends Channel {
        * @type {?boolean}
        */
       this.locked = data.thread_metadata.locked ?? false;
+
+      /**
+       * Whether members without `MANAGE_THREADS` can invite other members without `MANAGE_THREADS`
+       * <info>Always `null` in public threads</info>
+       * @type {?boolean}
+       */
+      this.invitable = this.type === 'GUILD_PRIVATE_THREAD' ? data.thread_metadata.invitable ?? false : null;
 
       /**
        * Whether the thread is archived
@@ -97,18 +105,11 @@ class ThreadChannel extends Channel {
        */
       this.archiveTimestamp = new Date(data.thread_metadata.archive_timestamp).getTime();
     } else {
-      if (!this.locked) {
-        this.locked = null;
-      }
-      if (!this.archived) {
-        this.archived = null;
-      }
-      if (!this.autoArchiveDuration) {
-        this.autoArchiveDuration = null;
-      }
-      if (!this.archiveTimestamp) {
-        this.archiveTimestamp = null;
-      }
+      this.locked ??= null;
+      this.archived ??= null;
+      this.autoArchiveDuration ??= null;
+      this.archiveTimestamp ??= null;
+      this.invitable ??= null;
     }
 
     if ('owner_id' in data) {
@@ -117,8 +118,8 @@ class ThreadChannel extends Channel {
        * @type {?Snowflake}
        */
       this.ownerId = data.owner_id;
-    } else if (!this.ownerId) {
-      this.ownerId = null;
+    } else {
+      this.ownerId ??= null;
     }
 
     if ('last_message_id' in data) {
@@ -127,8 +128,8 @@ class ThreadChannel extends Channel {
        * @type {?Snowflake}
        */
       this.lastMessageId = data.last_message_id;
-    } else if (!this.lastMessageId) {
-      this.lastMessageId = null;
+    } else {
+      this.lastMessageId ??= null;
     }
 
     if ('last_pin_timestamp' in data) {
@@ -137,8 +138,8 @@ class ThreadChannel extends Channel {
        * @type {?number}
        */
       this.lastPinTimestamp = data.last_pin_timestamp ? new Date(data.last_pin_timestamp).getTime() : null;
-    } else if (!this.lastPinTimestamp) {
-      this.lastPinTimestamp = null;
+    } else {
+      this.lastPinTimestamp ??= null;
     }
 
     if ('rate_limit_per_user' in data || !partial) {
@@ -147,8 +148,8 @@ class ThreadChannel extends Channel {
        * @type {?number}
        */
       this.rateLimitPerUser = data.rate_limit_per_user ?? 0;
-    } else if (!this.rateLimitPerUser) {
-      this.rateLimitPerUser = null;
+    } else {
+      this.rateLimitPerUser ??= null;
     }
 
     if ('message_count' in data) {
@@ -159,8 +160,8 @@ class ThreadChannel extends Channel {
        * @type {?number}
        */
       this.messageCount = data.message_count;
-    } else if (!this.messageCount) {
-      this.messageCount = null;
+    } else {
+      this.messageCount ??= null;
     }
 
     if ('member_count' in data) {
@@ -171,8 +172,8 @@ class ThreadChannel extends Channel {
        * @type {?number}
        */
       this.memberCount = data.member_count;
-    } else if (!this.memberCount) {
-      this.memberCount = null;
+    } else {
+      this.memberCount ??= null;
     }
 
     if (data.member && this.client.user) this.members._add({ user_id: this.client.user.id, ...data.member });
@@ -212,16 +213,18 @@ class ThreadChannel extends Channel {
    * Makes the client user join the thread.
    * @returns {Promise<ThreadChannel>}
    */
-  join() {
-    return this.members.add('@me').then(() => this);
+  async join() {
+    await this.members.add('@me');
+    return this;
   }
 
   /**
    * Makes the client user leave the thread.
    * @returns {Promise<ThreadChannel>}
    */
-  leave() {
-    return this.members.remove('@me').then(() => this);
+  async leave() {
+    await this.members.remove('@me');
+    return this;
   }
 
   /**
@@ -235,6 +238,34 @@ class ThreadChannel extends Channel {
   }
 
   /**
+   * Fetches the owner of this thread. If the thread member object isn't needed,
+   * use {@link ThreadChannel#ownerId} instead.
+   * @param {FetchOwnerOptions} [options] The options for fetching the member
+   * @returns {Promise<?ThreadMember>}
+   */
+  async fetchOwner({ cache = true, force = false } = {}) {
+    if (!force) {
+      const existing = this.members.cache.get(this.ownerId);
+      if (existing) return existing;
+    }
+
+    // We cannot fetch a single thread member, as of this commit's date, Discord API responds with 405
+    const members = await this.members.fetch(cache);
+    return members.get(this.ownerId) ?? null;
+  }
+
+  /**
+   * Fetches the message that started this thread, if any.
+   * <info>This only works when the thread started from a message in the parent channel, otherwise the promise will
+   * reject. If you just need the id of that message, use {@link ThreadChannel#id} instead.</info>
+   * @param {BaseFetchOptions} [options] Additional options for this fetch
+   * @returns {Promise<Message>}
+   */
+  fetchStarterMessage(options) {
+    return this.parent.messages.fetch(this.id, options);
+  }
+
+  /**
    * The options used to edit a thread channel
    * @typedef {Object} ThreadEditData
    * @property {string} [name] The new name for the thread
@@ -243,6 +274,8 @@ class ThreadChannel extends Channel {
    * should automatically archive in case of no recent activity
    * @property {number} [rateLimitPerUser] The ratelimit per user for the thread in seconds
    * @property {boolean} [locked] Whether the thread is locked
+   * @property {boolean} [invitable] Whether non-moderators can add other non-moderators to a thread
+   * <info>Can only be edited on `GUILD_PRIVATE_THREAD`</info>
    */
 
   /**
@@ -257,13 +290,23 @@ class ThreadChannel extends Channel {
    *   .catch(console.error);
    */
   async edit(data, reason) {
+    let autoArchiveDuration = data.autoArchiveDuration;
+    if (data.autoArchiveDuration === 'MAX') {
+      autoArchiveDuration = 1440;
+      if (this.guild.features.includes('SEVEN_DAY_THREAD_ARCHIVE')) {
+        autoArchiveDuration = 10080;
+      } else if (this.guild.features.includes('THREE_DAY_THREAD_ARCHIVE')) {
+        autoArchiveDuration = 4320;
+      }
+    }
     const newData = await this.client.api.channels(this.id).patch({
       data: {
         name: (data.name ?? this.name).trim(),
         archived: data.archived,
-        auto_archive_duration: data.autoArchiveDuration,
+        auto_archive_duration: autoArchiveDuration,
         rate_limit_per_user: data.rateLimitPerUser,
         locked: data.locked,
+        invitable: this.type === 'GUILD_PRIVATE_THREAD' ? data.invitable : undefined,
       },
       reason,
     });
@@ -302,6 +345,18 @@ class ThreadChannel extends Channel {
    */
   setAutoArchiveDuration(autoArchiveDuration, reason) {
     return this.edit({ autoArchiveDuration }, reason);
+  }
+
+  /**
+   * Sets whether members without the `MANAGE_THREADS` permission can invite other members without the
+   * `MANAGE_THREADS` permission to this thread.
+   * @param {boolean} [invitable=true] Whether non-moderators can invite non-moderators to this thread
+   * @param {string} [reason] Reason for changing invite
+   * @returns {Promise<ThreadChannel>}
+   */
+  setInvitable(invitable = true, reason) {
+    if (this.type !== 'GUILD_PRIVATE_THREAD') return Promise.reject(new RangeError('THREAD_INVITABLE_TYPE', this.type));
+    return this.edit({ invitable }, reason);
   }
 
   /**
@@ -360,7 +415,9 @@ class ThreadChannel extends Channel {
    * @readonly
    */
   get editable() {
-    return (this.ownerId === this.client.user.id && (this.type !== 'private_thread' || this.joined)) || this.manageable;
+    return (
+      (this.ownerId === this.client.user.id && (this.type !== 'GUILD_PRIVATE_THREAD' || this.joined)) || this.manageable
+    );
   }
 
   /**
@@ -395,17 +452,10 @@ class ThreadChannel extends Channel {
    */
   get sendable() {
     return (
-      !this.archived &&
-      (this.type !== 'private_thread' || this.joined || this.manageable) &&
-      this.permissionsFor(this.client.user)?.any(
-        [
-          Permissions.FLAGS.SEND_MESSAGES,
-          this.type === 'GUILD_PRIVATE_THREAD'
-            ? Permissions.FLAGS.USE_PRIVATE_THREADS
-            : Permissions.FLAGS.USE_PUBLIC_THREADS,
-        ],
-        false,
-      )
+      (!(this.archived && this.locked && !this.manageable) &&
+        (this.type !== 'GUILD_PRIVATE_THREAD' || this.joined || this.manageable) &&
+        this.permissionsFor(this.client.user)?.has(Permissions.FLAGS.SEND_MESSAGES_IN_THREADS, false)) ??
+      false
     );
   }
 
@@ -428,11 +478,9 @@ class ThreadChannel extends Channel {
    *   .then(deletedThread => console.log(deletedThread))
    *   .catch(console.error);
    */
-  delete(reason) {
-    return this.client.api
-      .channels(this.id)
-      .delete({ reason })
-      .then(() => this);
+  async delete(reason) {
+    await this.client.api.channels(this.id).delete({ reason });
+    return this;
   }
 
   // These are here only for documentation purposes - they are implemented by TextBasedChannel

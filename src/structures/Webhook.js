@@ -1,6 +1,5 @@
 'use strict';
 
-const Channel = require('./Channel');
 const MessagePayload = require('./MessagePayload');
 const { Error } = require('../errors');
 const { WebhookTypes } = require('../util/Constants');
@@ -103,8 +102,11 @@ class Webhook {
    * @property {string} [content] See {@link BaseMessageOptions#content}
    * @property {FileOptions[]|BufferResolvable[]|MessageAttachment[]} [files] See {@link BaseMessageOptions#files}
    * @property {MessageMentionOptions} [allowedMentions] See {@link BaseMessageOptions#allowedMentions}
+   * @property {MessageAttachment[]} [attachments] Attachments to send with the message
    * @property {MessageActionRow[]|MessageActionRowOptions[]} [components]
    * Action rows containing interactive components for the message (buttons, select menus)
+   * @property {Snowflake} [threadId] The id of the thread this message belongs to
+   * <info>For interaction webhooks, this property is ignored</info>
    */
 
   /**
@@ -167,15 +169,13 @@ class Webhook {
     }
 
     const { data, files } = await messagePayload.resolveFiles();
-    return this.client.api
-      .webhooks(this.id, this.token)
-      .post({
-        data,
-        files,
-        query: { thread_id: messagePayload.options.threadId, wait: true },
-        auth: false,
-      })
-      .then(d => this.client.channels?.cache.get(d.channel_id)?.messages._add(d, false) ?? d);
+    const d = await this.client.api.webhooks(this.id, this.token).post({
+      data,
+      files,
+      query: { thread_id: messagePayload.options.threadId, wait: true },
+      auth: false,
+    });
+    return this.client.channels?.cache.get(d.channel_id)?.messages._add(d, false) ?? d;
   }
 
   /**
@@ -191,30 +191,28 @@ class Webhook {
    *     'color': '#F0F',
    *     'footer_icon': 'http://snek.s3.amazonaws.com/topSnek.png',
    *     'footer': 'Powered by sneks',
-   *     'ts': Date.now() / 1000
+   *     'ts': Date.now() / 1_000
    *   }]
    * }).catch(console.error);
    * @see {@link https://api.slack.com/messaging/webhooks}
    */
-  sendSlackMessage(body) {
+  async sendSlackMessage(body) {
     if (!this.token) throw new Error('WEBHOOK_TOKEN_UNAVAILABLE');
 
-    return this.client.api
-      .webhooks(this.id, this.token)
-      .slack.post({
-        query: { wait: true },
-        auth: false,
-        data: body,
-      })
-      .then(data => data.toString() === 'ok');
+    const data = await this.client.api.webhooks(this.id, this.token).slack.post({
+      query: { wait: true },
+      auth: false,
+      data: body,
+    });
+    return data.toString() === 'ok';
   }
 
   /**
    * Options used to edit a {@link Webhook}.
    * @typedef {Object} WebhookEditData
    * @property {string} [name=this.name] The new name for the webhook
-   * @property {BufferResolvable} [avatar] The new avatar for the webhook
-   * @property {ChannelResolvable} [channel] The new channel for the webhook
+   * @property {?(BufferResolvable)} [avatar] The new avatar for the webhook
+   * @property {GuildTextChannelResolvable} [channel] The new channel for the webhook
    */
 
   /**
@@ -227,7 +225,7 @@ class Webhook {
     if (avatar && !(typeof avatar === 'string' && avatar.startsWith('data:'))) {
       avatar = await DataResolver.resolveImage(avatar);
     }
-    if (channel) channel = channel instanceof Channel ? channel.id : channel;
+    if (channel) channel = channel?.id ?? channel;
     const data = await this.client.api.webhooks(this.id, channel ? undefined : this.token).patch({
       data: { name, avatar, channel_id: channel },
       reason,
@@ -240,17 +238,37 @@ class Webhook {
   }
 
   /**
+   * Options that can be passed into fetchMessage.
+   * @typedef {options} WebhookFetchMessageOptions
+   * @property {boolean} [cache=true] Whether to cache the message.
+   * @property {Snowflake} [threadId] The id of the thread this message belongs to.
+   * <info>For interaction webhooks, this property is ignored</info>
+   */
+
+  /**
    * Gets a message that was sent by this webhook.
    * @param {Snowflake|'@original'} message The id of the message to fetch
-   * @param {boolean} [cache=true] Whether to cache the message
+   * @param {WebhookFetchMessageOptions|boolean} [cacheOrOptions={}] The options to provide to fetch the message.
+   * A **deprecated** boolean may be passed instead to specify whether to cache the message.
    * @returns {Promise<Message|APIMessage>} Returns the raw message data if the webhook was instantiated as a
    * {@link WebhookClient} or if the channel is uncached, otherwise a {@link Message} will be returned
    */
-  async fetchMessage(message, cache = true) {
+  async fetchMessage(message, cacheOrOptions = { cache: true }) {
+    if (typeof cacheOrOptions === 'boolean') {
+      cacheOrOptions = { cache: cacheOrOptions };
+    }
+
     if (!this.token) throw new Error('WEBHOOK_TOKEN_UNAVAILABLE');
 
-    const data = await this.client.api.webhooks(this.id, this.token).messages(message).get();
-    return this.client.channels?.cache.get(data.channel_id)?.messages._add(data, cache) ?? data;
+    const data = await this.client.api
+      .webhooks(this.id, this.token)
+      .messages(message)
+      .get({
+        query: {
+          thread_id: cacheOrOptions.threadId,
+        },
+      });
+    return this.client.channels?.cache.get(data.channel_id)?.messages._add(data, cacheOrOptions.cache) ?? data;
   }
 
   /**
@@ -273,7 +291,13 @@ class Webhook {
     const d = await this.client.api
       .webhooks(this.id, this.token)
       .messages(typeof message === 'string' ? message : message.id)
-      .patch({ data, files });
+      .patch({
+        data,
+        files,
+        query: {
+          thread_id: messagePayload.options.threadId,
+        },
+      });
 
     const messageManager = this.client.channels?.cache.get(d.channel_id)?.messages;
     if (!messageManager) return d;
@@ -298,15 +322,20 @@ class Webhook {
   /**
    * Delete a message that was sent by this webhook.
    * @param {MessageResolvable|'@original'} message The message to delete
+   * @param {Snowflake} [threadId] The id of the thread this message belongs to
    * @returns {Promise<void>}
    */
-  async deleteMessage(message) {
+  async deleteMessage(message, threadId) {
     if (!this.token) throw new Error('WEBHOOK_TOKEN_UNAVAILABLE');
 
     await this.client.api
       .webhooks(this.id, this.token)
       .messages(typeof message === 'string' ? message : message.id)
-      .delete();
+      .delete({
+        query: {
+          thread_id: threadId,
+        },
+      });
   }
 
   /**

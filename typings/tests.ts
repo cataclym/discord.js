@@ -1,8 +1,19 @@
+import { APIInteractionGuildMember } from 'discord-api-types';
 import {
   ApplicationCommand,
+  ApplicationCommandChannelOption,
+  ApplicationCommandChannelOptionData,
+  ApplicationCommandChoicesData,
   ApplicationCommandData,
   ApplicationCommandManager,
+  ApplicationCommandNonOptionsData,
+  ApplicationCommandOptionData,
   ApplicationCommandResolvable,
+  ApplicationCommandSubCommandData,
+  ApplicationCommandSubGroupData,
+  ButtonInteraction,
+  CacheFactory,
+  Caches,
   CategoryChannel,
   Client,
   ClientApplication,
@@ -11,6 +22,8 @@ import {
   CommandInteraction,
   CommandInteractionOption,
   CommandInteractionOptionResolver,
+  CommandOptionChoiceResolvableType,
+  CommandOptionNonChoiceResolvableType,
   Constants,
   DMChannel,
   Guild,
@@ -22,12 +35,16 @@ import {
   GuildResolvable,
   Intents,
   Interaction,
+  InteractionCollector,
+  LimitedCollection,
   Message,
   MessageActionRow,
   MessageAttachment,
   MessageButton,
   MessageCollector,
+  MessageComponentInteraction,
   MessageEmbed,
+  MessageManager,
   MessageReaction,
   NewsChannel,
   Options,
@@ -38,6 +55,7 @@ import {
   ReactionCollector,
   Role,
   RoleManager,
+  SelectMenuInteraction,
   Serialized,
   ShardClientUtil,
   ShardingManager,
@@ -45,12 +63,14 @@ import {
   StageChannel,
   StoreChannel,
   TextBasedChannelFields,
+  TextBasedChannels,
   TextChannel,
   ThreadChannel,
   Typing,
   User,
   VoiceChannel,
-} from '..';
+} from '.';
+import { ApplicationCommandOptionTypes, ApplicationCommandTypes } from './enums';
 
 const client: Client = new Client({
   intents: Intents.FLAGS.GUILDS,
@@ -58,6 +78,15 @@ const client: Client = new Client({
     MessageManager: 200,
     // @ts-expect-error
     Message: 100,
+    ThreadManager: {
+      maxSize: 1000,
+      keepOverLimit: (x: ThreadChannel) => x.id === '123',
+      sweepInterval: 5000,
+      sweepFilter: LimitedCollection.filterByLifetime({
+        getComparisonTimestamp: (x: ThreadChannel) => x.archiveTimestamp ?? 0,
+        excludeFromSweep: (x: ThreadChannel) => !x.archived,
+      }),
+    },
   }),
 });
 
@@ -398,6 +427,9 @@ client.on('ready', async () => {
   });
 });
 
+// This is to check that stuff is the right type
+declare const assertIsPromiseMember: (m: Promise<GuildMember>) => void;
+
 client.on('guildCreate', g => {
   const channel = g.channels.cache.random();
   if (!channel) return;
@@ -405,6 +437,32 @@ client.on('guildCreate', g => {
   channel.setName('foo').then(updatedChannel => {
     console.log(`New channel name: ${updatedChannel.name}`);
   });
+
+  // @ts-expect-error no options
+  assertIsPromiseMember(g.members.add(testUserId));
+
+  // @ts-expect-error no access token
+  assertIsPromiseMember(g.members.add(testUserId, {}));
+
+  // @ts-expect-error invalid role resolvable
+  assertIsPromiseMember(g.members.add(testUserId, { accessToken: 'totallyRealAccessToken', roles: [g.roles.cache] }));
+
+  assertType<Promise<GuildMember | null>>(
+    g.members.add(testUserId, { accessToken: 'totallyRealAccessToken', fetchWhenExisting: false }),
+  );
+
+  assertIsPromiseMember(g.members.add(testUserId, { accessToken: 'totallyRealAccessToken' }));
+
+  assertIsPromiseMember(
+    g.members.add(testUserId, {
+      accessToken: 'totallyRealAccessToken',
+      mute: true,
+      deaf: false,
+      roles: [g.roles.cache.first()!],
+      force: true,
+      fetchWhenExisting: true,
+    }),
+  );
 });
 
 client.on('messageReactionRemoveAll', async message => {
@@ -418,7 +476,8 @@ client.on('messageReactionRemoveAll', async message => {
 // This is to check that stuff is the right type
 declare const assertIsMessage: (m: Promise<Message>) => void;
 
-client.on('messageCreate', ({ channel }) => {
+client.on('messageCreate', message => {
+  const { channel } = message;
   assertIsMessage(channel.send('string'));
   assertIsMessage(channel.send({}));
   assertIsMessage(channel.send({ embeds: [] }));
@@ -433,9 +492,114 @@ client.on('messageCreate', ({ channel }) => {
   channel.send();
   // @ts-expect-error
   channel.send({ another: 'property' });
+
+  // Check collector creations.
+
+  // Verify that buttons interactions are inferred.
+  const buttonCollector = message.createMessageComponentCollector({ componentType: 'BUTTON' });
+  assertType<Promise<ButtonInteraction>>(message.awaitMessageComponent({ componentType: 'BUTTON' }));
+  assertType<Promise<ButtonInteraction>>(channel.awaitMessageComponent({ componentType: 'BUTTON' }));
+  assertType<InteractionCollector<ButtonInteraction>>(buttonCollector);
+
+  // Verify that select menus interaction are inferred.
+  const selectMenuCollector = message.createMessageComponentCollector({ componentType: 'SELECT_MENU' });
+  assertType<Promise<SelectMenuInteraction>>(message.awaitMessageComponent({ componentType: 'SELECT_MENU' }));
+  assertType<Promise<SelectMenuInteraction>>(channel.awaitMessageComponent({ componentType: 'SELECT_MENU' }));
+  assertType<InteractionCollector<SelectMenuInteraction>>(selectMenuCollector);
+
+  // Verify that message component interactions are default collected types.
+  const defaultCollector = message.createMessageComponentCollector();
+  assertType<Promise<MessageComponentInteraction>>(message.awaitMessageComponent());
+  assertType<Promise<MessageComponentInteraction>>(channel.awaitMessageComponent());
+  assertType<InteractionCollector<MessageComponentInteraction>>(defaultCollector);
+
+  // Verify that additional options don't affect default collector types.
+  const semiDefaultCollector = message.createMessageComponentCollector({ time: 10000 });
+  assertType<InteractionCollector<MessageComponentInteraction>>(semiDefaultCollector);
+  const semiDefaultCollectorChannel = message.createMessageComponentCollector({ time: 10000 });
+  assertType<InteractionCollector<MessageComponentInteraction>>(semiDefaultCollectorChannel);
+
+  // Verify that interaction collector options can't be used.
+
+  // @ts-expect-error
+  const interactionOptions = message.createMessageComponentCollector({ interactionType: 'APPLICATION_COMMAND' });
+
+  // Make sure filter parameters are properly inferred.
+  message.createMessageComponentCollector({
+    filter: i => {
+      assertType<MessageComponentInteraction>(i);
+      return true;
+    },
+  });
+
+  message.createMessageComponentCollector({
+    componentType: 'BUTTON',
+    filter: i => {
+      assertType<ButtonInteraction>(i);
+      return true;
+    },
+  });
+
+  message.createMessageComponentCollector({
+    componentType: 'SELECT_MENU',
+    filter: i => {
+      assertType<SelectMenuInteraction>(i);
+      return true;
+    },
+  });
+
+  message.awaitMessageComponent({
+    filter: i => {
+      assertType<MessageComponentInteraction>(i);
+      return true;
+    },
+  });
+
+  message.awaitMessageComponent({
+    componentType: 'BUTTON',
+    filter: i => {
+      assertType<ButtonInteraction>(i);
+      return true;
+    },
+  });
+
+  message.awaitMessageComponent({
+    componentType: 'SELECT_MENU',
+    filter: i => {
+      assertType<SelectMenuInteraction>(i);
+      return true;
+    },
+  });
+
+  channel.awaitMessageComponent({
+    filter: i => {
+      assertType<MessageComponentInteraction>(i);
+      return true;
+    },
+  });
+
+  channel.awaitMessageComponent({
+    componentType: 'BUTTON',
+    filter: i => {
+      assertType<ButtonInteraction>(i);
+      return true;
+    },
+  });
+
+  channel.awaitMessageComponent({
+    componentType: 'SELECT_MENU',
+    filter: i => {
+      assertType<SelectMenuInteraction>(i);
+      return true;
+    },
+  });
 });
 
 client.on('interaction', async interaction => {
+  assertType<Snowflake | null>(interaction.guildId);
+  assertType<Snowflake | null>(interaction.channelId);
+  assertType<GuildMember | APIInteractionGuildMember | null>(interaction.member);
+
   if (!interaction.isCommand()) return;
 
   void new MessageActionRow();
@@ -454,6 +618,10 @@ client.on('interaction', async interaction => {
 
   // @ts-expect-error
   await interaction.reply({ content: 'Hi!', components: [button] });
+
+  if (interaction.isMessageComponent()) {
+    assertType<Snowflake>(interaction.channelId);
+  }
 });
 
 client.login('absolutely-valid-token');
@@ -567,22 +735,57 @@ declare const applicationCommandData: ApplicationCommandData;
 declare const applicationCommandResolvable: ApplicationCommandResolvable;
 declare const applicationCommandManager: ApplicationCommandManager;
 {
-  type ApplicationCommandType = ApplicationCommand<{ guild: GuildResolvable }>;
+  type ApplicationCommandScope = ApplicationCommand<{ guild: GuildResolvable }>;
 
-  assertType<Promise<ApplicationCommandType>>(applicationCommandManager.create(applicationCommandData));
+  assertType<Promise<ApplicationCommandScope>>(applicationCommandManager.create(applicationCommandData));
   assertType<Promise<ApplicationCommand>>(applicationCommandManager.create(applicationCommandData, '0'));
-  assertType<Promise<ApplicationCommandType>>(
+  assertType<Promise<ApplicationCommandScope>>(
     applicationCommandManager.edit(applicationCommandResolvable, applicationCommandData),
   );
   assertType<Promise<ApplicationCommand>>(
     applicationCommandManager.edit(applicationCommandResolvable, applicationCommandData, '0'),
   );
-  assertType<Promise<Collection<Snowflake, ApplicationCommandType>>>(
+  assertType<Promise<Collection<Snowflake, ApplicationCommandScope>>>(
     applicationCommandManager.set([applicationCommandData]),
   );
   assertType<Promise<Collection<Snowflake, ApplicationCommand>>>(
     applicationCommandManager.set([applicationCommandData], '0'),
   );
+}
+
+declare const applicationNonChoiceOptionData: ApplicationCommandOptionData & {
+  type: CommandOptionNonChoiceResolvableType;
+};
+{
+  // Options aren't allowed on this command type.
+
+  // @ts-expect-error
+  applicationNonChoiceOptionData.choices;
+}
+
+declare const applicationChoiceOptionData: ApplicationCommandOptionData & { type: CommandOptionChoiceResolvableType };
+{
+  // Choices should be available.
+  applicationChoiceOptionData.choices;
+}
+
+declare const applicationSubGroupCommandData: ApplicationCommandSubGroupData;
+{
+  assertType<'SUB_COMMAND_GROUP' | ApplicationCommandOptionTypes.SUB_COMMAND_GROUP>(
+    applicationSubGroupCommandData.type,
+  );
+  assertType<ApplicationCommandSubCommandData[] | undefined>(applicationSubGroupCommandData.options);
+}
+
+declare const applicationSubCommandData: ApplicationCommandSubCommandData;
+{
+  assertType<'SUB_COMMAND' | ApplicationCommandOptionTypes.SUB_COMMAND>(applicationSubCommandData.type);
+
+  // Check that only subcommands can have no subcommand or subcommand group sub-options.
+  assertType<
+    | (ApplicationCommandChoicesData | ApplicationCommandNonOptionsData | ApplicationCommandChannelOptionData)[]
+    | undefined
+  >(applicationSubCommandData.options);
 }
 
 declare const guildApplicationCommandManager: GuildApplicationCommandManager;
@@ -620,7 +823,7 @@ declare const typing: Typing;
 assertType<PartialUser>(typing.user);
 if (typing.user.partial) assertType<null>(typing.user.username);
 
-assertType<TextChannel | PartialDMChannel | NewsChannel | ThreadChannel>(typing.channel);
+assertType<TextBasedChannels>(typing.channel);
 if (typing.channel.partial) assertType<undefined>(typing.channel.lastMessageId);
 
 assertType<GuildMember | null>(typing.member);
@@ -668,14 +871,14 @@ client.on('interactionCreate', async interaction => {
     assertType<string | null>(interaction.options.getString('name', false));
     assertType<string>(interaction.options.getString('name', true));
 
-    assertType<string>(interaction.options.getSubCommand());
-    assertType<string>(interaction.options.getSubCommand(true));
-    assertType<string | null>(interaction.options.getSubCommand(booleanValue));
-    assertType<string | null>(interaction.options.getSubCommand(false));
+    assertType<string>(interaction.options.getSubcommand());
+    assertType<string>(interaction.options.getSubcommand(true));
+    assertType<string | null>(interaction.options.getSubcommand(booleanValue));
+    assertType<string | null>(interaction.options.getSubcommand(false));
 
-    assertType<string>(interaction.options.getSubCommandGroup());
-    assertType<string>(interaction.options.getSubCommandGroup(true));
-    assertType<string | null>(interaction.options.getSubCommandGroup(booleanValue));
-    assertType<string | null>(interaction.options.getSubCommandGroup(false));
+    assertType<string>(interaction.options.getSubcommandGroup());
+    assertType<string>(interaction.options.getSubcommandGroup(true));
+    assertType<string | null>(interaction.options.getSubcommandGroup(booleanValue));
+    assertType<string | null>(interaction.options.getSubcommandGroup(false));
   }
 });

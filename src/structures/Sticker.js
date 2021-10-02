@@ -78,7 +78,7 @@ class Sticker extends Base {
      * The user that uploaded the guild sticker
      * @type {?User}
      */
-    this.user = sticker.user ? this.client.users.add(sticker.user) : null;
+    this.user = sticker.user ? this.client.users._add(sticker.user) : null;
 
     /**
      * The standard sticker's sort order within its pack
@@ -204,7 +204,7 @@ class Sticker extends Base {
   /**
    * Whether this sticker is the same as another one.
    * @param {Sticker|APISticker} other The sticker to compare it to
-   * @returns {boolean} Whether the sticker is equal to the given sticker or not
+   * @returns {boolean}
    */
   equals(other) {
     if (other instanceof Sticker) {

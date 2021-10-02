@@ -13,7 +13,7 @@ class WelcomeChannel extends Base {
 
     /**
      * The guild for this welcome channel
-     * @type {Guild|WelcomeGuild}
+     * @type {Guild|InviteGuild}
      */
     this.guild = guild;
 
@@ -42,7 +42,7 @@ class WelcomeChannel extends Base {
 
   /**
    * The channel of this welcome channel
-   * @type {?(TextChannel|NewsChannel)}
+   * @type {?(TextChannel|NewsChannel|StoreChannel)}
    */
   get channel() {
     return this.client.channels.resolve(this.channelId);
